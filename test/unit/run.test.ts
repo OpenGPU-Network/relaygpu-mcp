@@ -231,6 +231,7 @@ describe("check_task (F3)", () => {
     expect(r.isError).toBeFalsy();
     expect(jsonOf(r).video_url).toBe("https://cdn.provider.test/v.mp4");
     expect(notesOf(r)).toContain(EXPIRY_NOTE);
+    expect(notesOf(r)).toContain("status: completed"); // a polling agent reads the terminal state from the answer
     expect(m.calls[0].query.get("wait")).toBe("5");
     expect(m.calls[0].headers.get("x-api-key")).toBeNull();
     await s.close();

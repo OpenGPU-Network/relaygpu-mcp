@@ -62,7 +62,7 @@ const run_model = defineTool({
     if (remaining <= 0) return pending(res.status ?? "queued");
     try {
       const task = await client.tasks.wait(res.task_id, { timeoutMs: remaining, signal: ctx.signal });
-      return formatResult(task.result ?? {}, { ...media, notes: [`task_id: ${res.task_id} (completed)`] });
+      return formatResult(task.result ?? {}, { ...media, notes: [`task_id: ${res.task_id}`, "status: completed"] });
     } catch (e) {
       if (e instanceof APITimeoutError) return pending(lastStatus(e) ?? res.status ?? "queued");
       throw e;
@@ -115,7 +115,7 @@ const check_task = defineTool({
       });
     }
     if (task.status === "completed") {
-      return formatResult(task.result ?? {}, { ctx, inlineImages: inline_images, notes: [`task_id: ${task_id} (completed)`] });
+      return formatResult(task.result ?? {}, { ctx, inlineImages: inline_images, notes: [`task_id: ${task_id}`, "status: completed"] });
     }
     return jsonResult({ task_id, status: task.status, elapsed_seconds: task.elapsed_seconds }, [STILL_RUNNING]);
   },

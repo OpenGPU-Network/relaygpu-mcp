@@ -1,0 +1,1035 @@
+{
+ "source": "relay-v2/docs",
+ "pages": 21,
+ "sections": [
+  {
+   "page": "README.md",
+   "title": "Relay",
+   "heading": "Relay",
+   "anchor": "relay",
+   "text": "One API for AI inference: chat, images, video, audio, embeddings, multi-model\nworkflows and rentable machines, all on one key and one credit balance.\n\nRelay exposes standard REST endpoints, OpenAI- and Anthropic-compatible where\nthose formats exist, and handles provider selection, load balancing and\nfailover for you."
+  },
+  {
+   "page": "README.md",
+   "title": "Relay",
+   "heading": "Three things to know first",
+   "anchor": "three-things-to-know-first",
+   "text": "- **`mode` is a request-body field**, not a header or query parameter. Leave it\n  out (it defaults to `auto`) unless you need a specific mode; see [Modes](./reference/modes.md).\n- **Video is asynchronous by default.** A video request returns a `task_id`;\n  poll `GET /v2/tasks/{task_id}` or register a webhook. See\n  [Tasks & Webhooks](./reference/async-webhooks.md).\n- **Polling a task needs no auth header.** The `task_id` is the access token,\n  so treat it like a secret."
+  },
+  {
+   "page": "README.md",
+   "title": "Relay",
+   "heading": "How it works",
+   "anchor": "how-it-works",
+   "text": "Relay names every model it serves as **mode.source.model**:\n\n```\nmode       → where it runs and how it is billed: direct or opengpu (auto picks for you)\nsource     → the API family: openai, anthropic, image, video, audio, embedding\nmodel      → the model ID you send, e.g. openai/gpt-5.4 or anthropic/claude-sonnet-4-6\n```\n\n**Modes:**\n- `direct`: low-latency (<1s) execution on managed GPU providers\n- `opengpu`: decentralized execution on the [OpenGPU Network](https://opengpu.network), a permissionless compute network with redundant computing and on-chain settlement\n\nThis three-part name is also what tier restrictions, key allowlists and usage\nreports use."
+  },
+  {
+   "page": "README.md",
+   "title": "Relay",
+   "heading": "Quick example",
+   "anchor": "quick-example",
+   "text": "```bash\ncurl -X POST https://relaygpu.com/v2/openai/v1/chat/completions \\\n  -H \"X-API-Key: YOUR_KEY\" \\\n  -H \"Content-Type: application/json\" \\\n  -d '{\"model\": \"openai/gpt-5.4\", \"messages\": [{\"role\": \"user\", \"content\": \"Hello\"}]}'\n```"
+  },
+  {
+   "page": "README.md",
+   "title": "Relay",
+   "heading": "Endpoints",
+   "anchor": "endpoints",
+   "text": "| Category | Endpoints | Description |\n|----------|-----------|-------------|\n| Chat (OpenAI) | `/v2/openai/v1/chat/completions` | OpenAI-compatible chat, with streaming |\n| Chat (Anthropic) | `/v2/anthropic/v1/messages` | Anthropic-compatible messages, with streaming and prompt caching |\n| Image | `/v2/image/flux/generate`, `/v2/image/gemini-3/generate`, and more | [Text-to-image and image editing](./endpoints/images.md) |\n| Video | `/v2/video/wan-25/t2v`, `/v2/video/kling-o1/generate`, and more | [Text-, image- and video-to-video](./endpoints/video.md) |\n| Audio | `/v2/audio/index-tts-2/generate`, `/v2/audio/asr/whisper`, and more | [Text-to-speech and speech-to-text](./endpoints/audio.md) |\n| Embeddings | `/v2/openai/v1/embeddings` | OpenAI-compatible text embeddings |\n| Workflows | `GET /v2/workflows`, `POST /v2/workflows/{workflow_id}/run` | [Curated multi-model chains](./endpoints/workflows.md): one call runs an LLM → image → video pipeline |\n| Instances | `/v2/instances/catalog`, `POST /v2/instances` | [Rent a GPU, NPU or CPU machine](./endpoints/instances.md) (partner tiers) |\n| Models & pricing | `GET /v2/models`, `GET /v2/pricing` | [The live model list and rates](./endpoints/models.md) |\n| Tasks | `GET /v2/tasks/{task_id}` | Async task polling, or use [webhooks](./reference/async-webhooks.md) |\n\nFor every parameter, see the [API Explorer](https://docs.relaygpu.com/reference/api-explorer).\n\nEvery account can also query its own traffic over time: spend and tokens per\nkey and model, latency percentiles and error rates. See\n[Usage & Metrics](./reference/usage-metrics.md)."
+  },
+  {
+   "page": "README.md",
+   "title": "Relay",
+   "heading": "Get started",
+   "anchor": "get-started",
+   "text": "1. [Quickstart](./introduction/quickstart.md): your first request in a few minutes\n2. [Auth & Access](./introduction/authentication.md): API keys, dashboard login and tiers\n3. [API Explorer](https://docs.relaygpu.com/reference/api-explorer): the full endpoint reference"
+  },
+  {
+   "page": "endpoints/audio.md",
+   "title": "Audio",
+   "heading": "Audio",
+   "anchor": "audio",
+   "text": "Text-to-speech (TTS) and speech-to-text (STT). Each TTS model has its own\nroute under `/v2/audio/...`; all transcription models share\n`/v2/audio/asr/whisper`. Call them with an API key or as a guest on\nguest-enabled models. The exact routes, voices and per-model parameters are\nlisted in the [API Explorer → Audio](https://docs.relaygpu.com/reference/api-explorer).\n\nRequests are synchronous by default (both directions are fast); set\n`\"async\": true` to get a `task_id` to poll for longer inputs.\n\n| Route | Model | Returns |\n|---|---|---|\n| `POST /v2/audio/index-tts-2/generate` | IndexTTS-2 | audio inline (base64) |\n| `POST /v2/audio/minimax-speech-2-8-hd/generate` | MiniMax speech-2.8-hd | audio inline (base64) |\n| `POST /v2/audio/qwen3-tts-flash/generate` | Qwen3-TTS-Flash | a link to the audio |\n| `POST /v2/audio/asr/whisper` | transcription models (below) | text |\n\nThe TTS routes do not share a body: IndexTTS-2 and Qwen3-TTS-Flash take\n`input` (Qwen3-TTS-Flash also requires a `voice`), MiniMax takes `text` and\nrequires a `voice_id`. Check\neach route in the API Explorer."
+  },
+  {
+   "page": "endpoints/audio.md",
+   "title": "Audio",
+   "heading": "Text to speech",
+   "anchor": "text-to-speech",
+   "text": "```bash\ncurl -X POST https://relaygpu.com/v2/audio/index-tts-2/generate \\\n  -H \"X-API-Key: YOUR_KEY\" \\\n  -H \"Content-Type: application/json\" \\\n  -d '{\"input\": \"Hello from Relay\"}'\n```\n\nThe response shape depends on the model; there are two shapes.\n\nQwen `qwen3-tts-flash` returns a **link**:\n`{\"audio_url\": \"https://cdn.relaygpu.com/content/0jTz5Ht994t1szRMSgF1JQ\",\n\"characters\": 52, \"audio_id\": \"...\", \"task_id\": \"...\", \"mode\": \"direct\"}`.\n\n`index-tts-2` (shown above) and MiniMax `speech-2.8-hd` return the audio\n**inline**, base64-encoded — decode it and write the bytes to a file:\n`{\"audio_base64\": \"UklGRiQAAABXQVZFZm10...\", \"content_type\": \"audio/wav\",\n\"task_id\": \"...\", \"mode\": \"direct\"}` (MiniMax also reports `audio_length_ms`,\n`audio_format`, `audio_size_bytes`, `audio_sample_rate` and `audio_channel`).\n\nHosted `audio_url` links live **1 hour** by default, alongside the task record.\nAdd `store_output: relay1d`, `relay7d` or `relay30d` to keep both for 1, 7 or 30\ndays for a flat per-file fee — see [Video → How long the link lives](video.md)\nand `media_storage` in `GET /v2/pricing`. `store_output` is **not available on\nthe inline routes above**: there is no link to host, so a `relay*` value returns\n`422` naming the model. `store_output_supported` in `GET /v2/models` is the\nauthoritative per-model answer.\n\nIndexTTS-2's voice-cloning reference `spk_audio_url` takes a URL or base64, but\nits emotion reference `emo_audio_url` is a URL only. Local file? Upload it with\n[Files](files.md) and pass the returned `url`."
+  },
+  {
+   "page": "endpoints/audio.md",
+   "title": "Audio",
+   "heading": "Speech to text",
+   "anchor": "speech-to-text",
+   "text": "The transcription models share one endpoint; `model` is **required** and\npicks between them.\n\n| `model` | Billed | Returns |\n|---|---|---|\n| `openai/whisper-1` | per second of audio | `text`, `language`, `duration` |\n| `openai/gpt-4o-mini-transcribe` | per token | `text` |\n| `openai/whisper-large-v3` | — | **currently unavailable** (`403 MODEL_NOT_AVAILABLE`); the name stays accepted so it can return |\n\n```bash\ncurl -X POST https://relaygpu.com/v2/audio/asr/whisper \\\n  -H \"X-API-Key: YOUR_KEY\" \\\n  -H \"Content-Type: application/json\" \\\n  -d '{\"model\": \"openai/whisper-1\",\n       \"audio_url\": \"https://cdn.relaygpu.com/content/NyBogi-5y4X2Mo0XHfGbHQ\"}'\n```\n\n```json\n{\n  \"text\": \"The great brown fox jumps over the lazy dog near the riverbank.\",\n  \"language\": \"english\",\n  \"duration\": 3.2,\n  \"task_id\": \"direct:...\",\n  \"mode\": \"direct\"\n}\n```\n\n`audio_url` is a URL only — there is no base64 form. Local file? Upload it with\n[Files](files.md) and pass the returned `url`.\n\n`gpt-4o-mini-transcribe` returns `text` alone — it reports neither the language\nnor the clip's length.\n\n`language` (an ISO 639-1 hint) and `temperature` apply to every model.\n`prompt` — a style hint, or the previous segment to continue from — is a\n`whisper-1` and `gpt-4o-mini-transcribe` option; `task: \"translate\"`,\n`return_timestamps`, `chunk_length_s` and `batch_size` belong to `whisper-large-v3`\nonly, and are refused while it is unavailable. Sending one to a model that does not take it returns `422` naming the\nmodel, so nothing is ever silently dropped.\n\nThe transcript comes back as text, so there is no media link to host and\n`store_output` is not part of this request.\n\nFor full parameter details per model, see the [API Explorer → Audio](https://docs.relaygpu.com/reference/api-explorer)."
+  },
+  {
+   "page": "endpoints/chat.md",
+   "title": "Chat",
+   "heading": "Chat",
+   "anchor": "chat",
+   "text": "Two chat endpoints, one per API format: an OpenAI-compatible one and an\nAnthropic-compatible one, each with its own model catalog. Call them with an\nAPI key (either header), your dashboard login, or as a guest on\nguest-enabled models. Point the official OpenAI or Anthropic SDK at Relay and\nit works unchanged. The live model list is [`GET /v2/models`](models.md).\n\n| Source | Endpoint | Format | Streaming |\n|--------|----------|--------|-----------|\n| OpenAI | `POST /v2/openai/v1/chat/completions` | OpenAI-compatible | Yes |\n| Anthropic | `POST /v2/anthropic/v1/messages` | Anthropic-compatible | Yes |"
+  },
+  {
+   "page": "endpoints/chat.md",
+   "title": "Chat",
+   "heading": "Examples",
+   "anchor": "examples",
+   "text": "**OpenAI-compatible:**\n```bash\ncurl -X POST https://relaygpu.com/v2/openai/v1/chat/completions \\\n  -H \"Authorization: Bearer YOUR_KEY\" \\\n  -H \"Content-Type: application/json\" \\\n  -d '{\"model\": \"openai/gpt-5.4\", \"messages\": [{\"role\": \"user\", \"content\": \"Hello\"}]}'\n```\n\nOr with the OpenAI SDK, pointing `base_url` at the Relay OpenAI path:\n\n```python\nfrom openai import OpenAI\n\nclient = OpenAI(base_url=\"https://relaygpu.com/v2/openai/v1\", api_key=\"YOUR_KEY\")\nresp = client.chat.completions.create(model=\"openai/gpt-5.4\", messages=[{\"role\": \"user\", \"content\": \"Hello\"}])\n```\n\nThe Anthropic path works the same way with the Anthropic SDK: set its `base_url` to `https://relaygpu.com/v2/anthropic` (the SDK appends `/v1/messages`).\n\n**Anthropic:**\n```bash\ncurl -X POST https://relaygpu.com/v2/anthropic/v1/messages \\\n  -H \"Authorization: Bearer YOUR_KEY\" \\\n  -H \"Content-Type: application/json\" \\\n  -d '{\"model\": \"anthropic/claude-sonnet-4-6\", \"messages\": [{\"role\": \"user\", \"content\": \"Hello\"}], \"max_tokens\": 1024}'\n```\n\nAll chat endpoints support `\"async\": true` for asynchronous execution; see\n[Tasks & Webhooks](../reference/async-webhooks.md)."
+  },
+  {
+   "page": "endpoints/chat.md",
+   "title": "Chat",
+   "heading": "Streaming",
+   "anchor": "streaming",
+   "text": "OpenAI and Anthropic endpoints support real-time streaming via Server-Sent Events (SSE). Add `\"stream\": true` to your request body. Streaming is direct mode only and cannot be combined with `async`.\n\n**OpenAI** (standard OpenAI SSE format):\n\n```bash\ncurl -N -X POST https://relaygpu.com/v2/openai/v1/chat/completions \\\n  -H \"Authorization: Bearer YOUR_KEY\" \\\n  -H \"Content-Type: application/json\" \\\n  -d '{\"model\": \"openai/gpt-5.4\", \"messages\": [{\"role\": \"user\", \"content\": \"Hello\"}], \"stream\": true}'\n```\n\nEach chunk is a `data:` line containing a JSON object, terminated by a blank line:\n\n```\ndata: {\"id\":\"chatcmpl-...\",\"object\":\"chat.completion.chunk\",\"choices\":[{\"delta\":{\"content\":\"Hello\"},\"index\":0}]}\n\ndata: {\"id\":\"chatcmpl-...\",\"object\":\"chat.completion.chunk\",\"choices\":[{\"delta\":{\"content\":\" there\"},\"index\":0}]}\n\ndata: [DONE]\n```\n\n**Anthropic** (Anthropic SSE format with `event:` + `data:` pairs):\n\n```bash\ncurl -N -X POST https://relaygpu.com/v2/anthropic/v1/messages \\\n  -H \"Authorization: Bearer YOUR_KEY\" \\\n  -H \"Content-Type: application/json\" \\\n  -d '{\"model\": \"anthropic/claude-sonnet-4-6\", \"messages\": [{\"role\": \"user\", \"content\": \"Hello\"}], \"max_tokens\": 1024, \"stream\": true}'\n```\n\nEvents follow the Anthropic Messages API streaming format:\n\n```\nevent: message_start\ndata: {\"type\":\"message_start\",\"message\":{\"id\":\"msg_...\",\"model\":\"claude-sonnet-4-6\",\"role\":\"assistant\"}}\n\nevent: content_block_delta\ndata: {\"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"text_delta\",\"text\":\"Hello\"}}\n\nevent: content_block_delta\ndata: {\"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"text_delta\",\"text\":\" there\"}}\n\nevent: message_stop\ndata: {\"type\":\"message_stop\"}\n```\n\n**Notes:**\n- Use `curl -N` (or disable buffering in your HTTP client) to receive chunks in real time\n- Response content type is `text/event-stream`"
+  },
+  {
+   "page": "endpoints/chat.md",
+   "title": "Chat",
+   "heading": "Prompt caching (Anthropic)",
+   "anchor": "prompt-caching-anthropic",
+   "text": "The Anthropic endpoint supports Anthropic's prompt caching. Mark the end of a\nlong, reused prefix with `cache_control`; a later request that repeats the\nprefix within the TTL reads it back at the cache-read rate instead of paying\nfull input price.\n\n**Where markers go** — the same places Anthropic takes them:\n\n| Where | Example |\n|---|---|\n| `system` blocks | `\"system\": [{\"type\": \"text\", \"text\": \"…\", \"cache_control\": {\"type\": \"ephemeral\"}}]` |\n| `messages[].content` blocks (text, image, document, `tool_use`, `tool_result`) | `{\"type\": \"text\", \"text\": \"…\", \"cache_control\": {\"type\": \"ephemeral\"}}` |\n| `tools` entries | `{\"name\": \"…\", \"input_schema\": {…}, \"cache_control\": {\"type\": \"ephemeral\"}}` |\n| top level (automatic caching) | `\"cache_control\": {\"type\": \"ephemeral\"}` |\n\nA marker is exactly `{\"type\": \"ephemeral\"}` with an optional `\"ttl\"`: `\"5m\"`\n(the default) or `\"1h\"`. Anything else — another `type`, another `ttl`, an\nextra key — is a `422`. At most 4 markers per request (Anthropic's limit).\n\n**Automatic caching.** A top-level `cache_control` puts the breakpoint on the\nlast cacheable block for you: the last block of the last message (walking back\npast thinking blocks and empty text, then through `system`, then `tools`). If\nnothing is cacheable, the request runs uncached. It is a `400` when your own\nmarkers already use all 4 slots, or when that last block carries its own marker\nwith a different `ttl` (the same `ttl` is fine).\n\n```bash\ncurl -X POST https://relaygpu.com/v2/anthropic/v1/messages \\\n  -H \"Authorization: Bearer YOUR_KEY\" \\\n  -H \"Content-Type: application/json\" \\\n  -d '{\"model\": \"anthropic/claude-sonnet-5\", \"max_tokens\": 1024,\n       \"system\": [{\"type\": \"text\", \"text\": \"<long reference document>\",\n                   \"cache_control\": {\"type\": \"ephemeral\", \"ttl\": \"1h\"}}],\n       \"messages\": [{\"role\": \"user\", \"content\": \"Summarise section 2.\"}]}'\n```\n\n**Price per class.** Every prompt token is billed at the rate of its class:\nfresh input at `per_1m_input_tokens`, cache reads at\n`per_1m_cached_input_tokens`, 5-minute writes at\n`per_1m_cache_write_5m_input_tokens`, 1-hour writes at\n`per_1m_cache_write_1h_input_tokens` — all listed per model on\n[`GET /v2/pricing`](https://relaygpu.com/v2/pricing). A model caches only when\nits pricing lists the read rate and both write rates; on any other model a\nrequest carrying `cache_control` is a `422` naming the model.\n\n**Usage.** The response's `usage` is Anthropic's, returned verbatim:\n`input_tokens` (the uncached remainder), `cache_creation_input_tokens`,\n`cache_read_input_tokens` and the per-TTL `cache_creation` breakdown. Below the\nmodel's minimum cacheable length Anthropic reports a write of `0` and the\nrequest bills as uncached.\n\n**Isolation.** Caches are private to your account: when a request carries a\nmarker, Relay prepends a short namespace block to `system` (tool-definition\nmarkers move onto it, keeping the longest `ttl`). Its few tokens are part of the\ncached prefix and are billed with it. All keys of one account share the\naccount's caches.\n\n**Getting reads.** Reads land best on repeated requests with a byte-identical\nprefix within the TTL; Relay sends an account's cached requests for a model\nback to where the cache was written while that is available.\n\n**Guests** cannot use prompt caching (`422`) — authenticate with an API key.\n\nFor full parameter details, available models, and response schemas, see the [API Explorer](https://docs.relaygpu.com/reference/api-explorer)."
+  },
+  {
+   "page": "endpoints/chat.md",
+   "title": "Chat",
+   "heading": "Changes",
+   "anchor": "changes",
+   "text": "- **2026-09-24** — prompt caching on the Anthropic endpoint. `cache_control` is\n  accepted wherever Anthropic takes it (including top-level automatic caching)\n  instead of being refused with `422`; reads and 5-minute / 1-hour writes are\n  billed at their own rates on models whose pricing lists them."
+  },
+  {
+   "page": "endpoints/embeddings.md",
+   "title": "Embeddings",
+   "heading": "Embeddings",
+   "anchor": "embeddings",
+   "text": "Generate vector embeddings from text. The endpoint is **OpenAI-compatible** (a\ndrop-in for the OpenAI SDK's embeddings API), served under\n`/v2/openai/v1/embeddings`. The available models and per-model parameters are listed\nin the [API Explorer → Embeddings](https://docs.relaygpu.com/reference/api-explorer),\nthe single source of truth, always in sync with what's live.\n\nCall it with an API key or as a guest on guest-enabled models. Requests are\nsynchronous (embedding is fast) and run in direct mode. `input` accepts a single\nstring or a list of strings (batch), or pre-tokenized IDs; the response returns\none vector per input, in order."
+  },
+  {
+   "page": "endpoints/embeddings.md",
+   "title": "Embeddings",
+   "heading": "Example",
+   "anchor": "example",
+   "text": "```bash\ncurl -X POST https://relaygpu.com/v2/openai/v1/embeddings \\\n  -H \"X-API-Key: YOUR_KEY\" \\\n  -H \"Content-Type: application/json\" \\\n  -d '{\"model\": \"openai/text-embedding-3-small\", \"input\": \"The quick brown fox\"}'\n```\n\nOr with the OpenAI SDK, pointing `base_url` at the Relay OpenAI path:\n\n```python\nfrom openai import OpenAI\n\nclient = OpenAI(base_url=\"https://relaygpu.com/v2/openai/v1\", api_key=\"YOUR_KEY\")\nresp = client.embeddings.create(model=\"openai/text-embedding-3-small\", input=\"The quick brown fox\")\n```\n\nThe response follows the OpenAI embeddings shape: `{object, data: [{embedding, index}], model, usage}`.\nBilling is per **input** token only (embeddings produce no output tokens).\n\nFor full parameter details per model, see the [API Explorer → Embeddings](https://docs.relaygpu.com/reference/api-explorer)."
+  },
+  {
+   "page": "endpoints/files.md",
+   "title": "Files",
+   "heading": "Files",
+   "anchor": "files",
+   "text": "Host a file from your own machine and get back a link that any `*_url` request\nfield accepts — `video_url`, `audio_url`, `reference_video_url`, an image URL\nfield, and so on. Upload once, then pass the link to as many requests as you\nlike while it lives.\n\nMany routes take a source video or audio file **only** as a URL (see\n[Video](video.md#source-video-and-audio-inputs) and [Audio](audio.md)). If the\nfile is on your disk, upload it here first.\n\n| Call | What it does |\n|---|---|\n| `POST /v2/files` | Upload a file — the raw bytes, or a public URL to copy |\n| `GET /v2/files/{file_id}` | One file: its link, status and time left |\n| `GET /v2/files` | Your files, newest first — uploads **and** hosted results |\n| `DELETE /v2/files/{file_id}` | Take the link down now |\n\nAll four take your API key (`X-API-Key: relay_sk_...` or\n`Authorization: Bearer relay_sk_...`). Guests cannot host files: a call without\na credential returns `403 TIER_FEATURE_UNAVAILABLE`."
+  },
+  {
+   "page": "endpoints/files.md",
+   "title": "Files",
+   "heading": "Upload a file",
+   "anchor": "upload-a-file",
+   "text": "Two forms share one route. Pick by `Content-Type`.\n\n**Raw bytes** — the file is the request body, and its `Content-Type` must be an\nimage, video or audio type. `retention` and `filename` go on the query string:\n\n```bash\ncurl -X POST \"https://relaygpu.com/v2/files?retention=relay1d&filename=clip.mp4\" \\\n  -H \"X-API-Key: relay_sk_...\" \\\n  -H \"Content-Type: video/mp4\" \\\n  --data-binary @clip.mp4\n```\n\n**A public URL** — send JSON and Relay copies the object for you. `retention`\nand `filename` go in the body:\n\n```bash\ncurl -X POST https://relaygpu.com/v2/files \\\n  -H \"X-API-Key: relay_sk_...\" \\\n  -H \"Content-Type: application/json\" \\\n  -d '{\"url\": \"https://example.com/voice.wav\", \"retention\": \"relay1h\"}'\n```\n\nBoth answer `201` with the file:\n\n```json\n{\n  \"file_id\": \"file_3f9c2a7d1e0b4c58a6d2e9f1\",\n  \"url\": \"https://cdn.relaygpu.com/content/0jTz5Ht994t1szRMSgF1JQ\",\n  \"source\": \"upload\",\n  \"content_type\": \"video/mp4\",\n  \"size_bytes\": 18734211,\n  \"retention\": \"relay1d\",\n  \"expires_at\": \"2026-10-06T09:14:02Z\",\n  \"seconds_left\": 86400,\n  \"cost_usd\": 0.0005,\n  \"created_at\": \"2026-10-05T09:14:02Z\",\n  \"status\": \"ready\",\n  \"task_id\": null,\n  \"workflow_run_id\": null,\n  \"used_by\": []\n}\n```\n\nPass `url` straight into a request:\n\n```bash\ncurl -X POST https://relaygpu.com/v2/video/bria-upscale/generate \\\n  -H \"X-API-Key: relay_sk_...\" -H \"Content-Type: application/json\" \\\n  -d '{\"video_url\": \"https://cdn.relaygpu.com/content/0jTz5Ht994t1szRMSgF1JQ\"}'\n```"
+  },
+  {
+   "page": "endpoints/files.md",
+   "title": "Files",
+   "heading": "Retention",
+   "anchor": "retention",
+   "text": "`retention` decides how long the link lives. Choose it at upload time: it\n**cannot be extended** afterwards. If you need the file for longer, upload it\nagain with a longer retention.\n\n| `retention` | Link lives | Fee |\n|---|---|---|\n| `relay1h` (default) | 1 hour | Free — counts against your daily free upload quota |\n| `relay1d` | 1 day | Per-file fee |\n| `relay7d` | 7 days | Per-file fee |\n| `relay30d` | 30 days | Per-file fee |\n\nThe per-file fees are the same `media_storage` fees that `store_output` uses on\nresults — current rates, and which options are offered right now, are in\n[`GET /v2/pricing`](models.md#output-media-storage-fees). An option missing\nfrom that block returns `422`. The fee is charged once the file is stored; if\nthe upload fails, nothing is charged."
+  },
+  {
+   "page": "endpoints/files.md",
+   "title": "Files",
+   "heading": "Limits",
+   "anchor": "limits",
+   "text": "- **100 MB per file**, on both forms. A larger file returns `413 FILE_TOO_LARGE`.\n- **Images, video and audio only.** Anything else returns\n  `415 FILE_TYPE_UNSUPPORTED` — for the URL form, that is judged on the object\n  Relay fetched.\n- **Daily free quota.** `relay1h` uploads count against a daily quota of files\n  and bytes, set per tier. Once it is used up, free uploads return\n  `429 FILE_QUOTA_EXCEEDED` with a `Retry-After` header counting to the next\n  00:00 UTC, when the quota resets. Paid retention (`relay1d`, `relay7d`,\n  `relay30d`) is **not** limited by this quota.\n- Uploads also count against your tier's per-minute rate limit\n  (`429 RATE_LIMITED`; see [Rate Limits](../reference/rate-limits.md))."
+  },
+  {
+   "page": "endpoints/files.md",
+   "title": "Files",
+   "heading": "Safe retries",
+   "anchor": "safe-retries",
+   "text": "Send an `Idempotency-Key` header (any string up to 255 characters, unique per\nfile) to make a retry safe: a repeat of the same upload answers with the same\n`file_id` and is not charged again.\n\n```bash\ncurl -X POST \"https://relaygpu.com/v2/files?retention=relay7d\" \\\n  -H \"X-API-Key: relay_sk_...\" \\\n  -H \"Idempotency-Key: clip-2026-10-05-001\" \\\n  -H \"Content-Type: video/mp4\" \\\n  --data-binary @clip.mp4\n```"
+  },
+  {
+   "page": "endpoints/files.md",
+   "title": "Files",
+   "heading": "Read a file",
+   "anchor": "read-a-file",
+   "text": "```bash\ncurl https://relaygpu.com/v2/files/file_3f9c2a7d1e0b4c58a6d2e9f1 \\\n  -H \"X-API-Key: relay_sk_...\"\n```\n\nReturns the same object as the upload. The fields to watch:\n\n| Field | Meaning |\n|---|---|\n| `status` | `ready` (the link works), `expired` (its retention ran out) or `deleted` (you took it down) |\n| `seconds_left` | Time until `expires_at`; `0` unless `status` is `ready` |\n| `used_by` | The last 20 task ids whose request referenced this link |\n| `source` | `upload` (you uploaded it) or `result` (a model produced it) |\n| `cost_usd` | The fee charged for an upload; `null` on results, which are billed on their task |\n| `task_id`, `workflow_run_id` | On a result: the task (and workflow run) that produced it |\n\nAn expired file stays readable for 24 hours after it expires. After that — or\nfor an id that is not yours — the answer is `404 FILE_NOT_FOUND`."
+  },
+  {
+   "page": "endpoints/files.md",
+   "title": "Files",
+   "heading": "List your files",
+   "anchor": "list-your-files",
+   "text": "```bash\ncurl \"https://relaygpu.com/v2/files?source=upload&limit=20\" \\\n  -H \"X-API-Key: relay_sk_...\"\n```\n\n```json\n{\n  \"files\": [\n    {\"file_id\": \"file_3f9c2a7d1e0b4c58a6d2e9f1\", \"url\": \"https://cdn.relaygpu.com/content/0jTz5Ht994t1szRMSgF1JQ\",\n     \"source\": \"upload\", \"content_type\": \"video/mp4\", \"size_bytes\": 18734211, \"retention\": \"relay1d\",\n     \"expires_at\": \"2026-10-06T09:14:02Z\", \"seconds_left\": 86213, \"cost_usd\": 0.0005,\n     \"created_at\": \"2026-10-05T09:14:02Z\", \"status\": \"ready\", \"task_id\": null,\n     \"workflow_run_id\": null, \"used_by\": [\"direct:7b1e0c4a-...\"]}\n  ],\n  \"next_cursor\": \"file_3f9c2a7d1e0b4c58a6d2e9f1\"\n}\n```\n\nThe list holds your uploads **and** the media results Relay hosted for your\nrequests (`source: \"result\"`, with the `task_id` that produced them, and\n`retention` set to the `store_output` option the request used, or `relay1h` for\nthe default hour). Newest first; deleted files and files expired more than 24\nhours ago are left out.\n\n| Query | Meaning |\n|---|---|\n| `source` | `upload` or `result`; omit for both |\n| `status` | `ready` or `expired`; omit for both |\n| `limit` | 1–200, default 50 |\n| `cursor` | The previous page's `next_cursor`; `next_cursor` is `null` on the last page |"
+  },
+  {
+   "page": "endpoints/files.md",
+   "title": "Files",
+   "heading": "Delete a file",
+   "anchor": "delete-a-file",
+   "text": "```bash\ncurl -X DELETE https://relaygpu.com/v2/files/file_3f9c2a7d1e0b4c58a6d2e9f1 \\\n  -H \"X-API-Key: relay_sk_...\"\n```\n\nAnswers `204` with no body. The link stops working from the next request, and\nthe file reads back with `status: \"deleted\"`. Deleting is idempotent: deleting\nit again also answers `204`. Deleting a result leaves its task untouched. No fee\nis refunded."
+  },
+  {
+   "page": "endpoints/files.md",
+   "title": "Files",
+   "heading": "Errors",
+   "anchor": "errors",
+   "text": "Every error carries the usual envelope (see [Errors](../reference/errors.md)).\n\n| Status | `error.code` | When |\n|---|---|---|\n| `402` | `INSUFFICIENT_CREDITS` | A paid retention and your balance is below the credit floor |\n| `402` | `KEY_BUDGET_EXHAUSTED` | This sub-key's `key_budget` is used up |\n| `403` | `TIER_FEATURE_UNAVAILABLE` | No credential — guests cannot host files |\n| `404` | `FILE_NOT_FOUND` | Unknown id, another account's file, or expired more than 24 hours ago |\n| `413` | `FILE_TOO_LARGE` | The file is larger than 100 MB |\n| `415` | `FILE_TYPE_UNSUPPORTED` | Not an image, video or audio file |\n| `422` | `VALIDATION_ERROR` | Bad `retention`, `url` or `filename`, an empty body, a retention not offered right now, or an unknown `cursor` |\n| `429` | `FILE_QUOTA_EXCEEDED` | The daily free (`relay1h`) quota is used up — `Retry-After` counts to 00:00 UTC |\n| `429` | `RATE_LIMITED` | The per-minute rate limit — `Retry-After` is set |\n| `502` | `UPSTREAM_ERROR` | The file could not be stored, the URL could not be fetched, or a delete could not take the link down — retry later |\n\nFor full request and response schemas, see the\n[API Explorer → Files](https://docs.relaygpu.com/reference/api-explorer)."
+  },
+  {
+   "page": "endpoints/images.md",
+   "title": "Images",
+   "heading": "Images",
+   "anchor": "images",
+   "text": "Generate images from text prompts, or edit existing ones. Each model family has\nits own route. Call them with an API key or as a guest on guest-enabled models.\nRequests are synchronous by default; add `\"async\": true` for a `task_id`.\n\nThe one thing to know: **some routes return the image inline as base64, others\nreturn a link** that expires after 1 hour unless you store it. Each section\nbelow says which."
+  },
+  {
+   "page": "endpoints/images.md",
+   "title": "Images",
+   "heading": "Available endpoints",
+   "anchor": "available-endpoints",
+   "text": "| Model family | Endpoint | Type |\n|----------|----------|------|\n| Flux 2 Pro | `POST /v2/image/flux/generate` | Text-to-image |\n| Gemini 3 Pro / 3.1 Flash / 2.5 Flash | `POST /v2/image/gemini-3/generate` | Text-to-image / editing (multi-image on 3 Pro) |\n| GPT Image 1.5 | `POST /v2/image/gpt-image/generate` | Text-to-image |\n| GPT Image 1.5 | `POST /v2/image/gpt-image/edit` | Image-to-image |\n| GPT Image 2 / 2.5 Sunburst / 2.5 Flare | `POST /v2/image/gpt-image-2/generate` | Text-to-image / editing / multi-image composition |\n| Qwen | `POST /v2/image/qwen/generate` | Text-to-image |\n| Qwen | `POST /v2/image/qwen/edit` | Image-to-image |\n| Seedream 5.0 Pro | `POST /v2/image/seedream-5-0-pro/generate` | Text-to-image / editing (up to 14 references) |\n| Wan 2.7 Image Pro | `POST /v2/image/wan-2-7-image-pro/generate` | Text-to-image / editing / multi-image fusion |\n| Real-ESRGAN | `POST /v2/image/realesrgan/upscale` | Upscaling (2x / 4x) — **currently unavailable** |\n| FLUX.2 klein | `POST /v2/image/flux-1/generate` | Text-to-image — **currently unavailable** (`403 MODEL_NOT_AVAILABLE`); use `/v2/image/flux/generate` |\n\nThe `model` you see in `GET /v2/models` maps to its family route above. Send\neach model to its own route: the routes are not interchangeable, and a model\nsent to another family's route is not supported.\n\n**Prompt length.** The GPT Image routes accept up to **32,000** characters,\nOpenAI's documented maximum for those models. No other image model has a limit\nof ours: send the prompt you need, and if it is too long for the provider, the\nprovider's own refusal comes back to you as a `400`."
+  },
+  {
+   "page": "endpoints/images.md",
+   "title": "Images",
+   "heading": "Example",
+   "anchor": "example",
+   "text": "```bash\ncurl -X POST https://relaygpu.com/v2/image/flux/generate \\\n  -H \"X-API-Key: YOUR_KEY\" \\\n  -H \"Content-Type: application/json\" \\\n  -d '{\"prompt\": \"A red fox in autumn forest\", \"width\": 1024, \"height\": 1024}'\n```\n\nResult shape depends on the model family. **FLUX, GPT Image, and Gemini** return\nbase64-encoded images (PNG unless you set `output_format`) in an `images`\narray; decode each string to get the bytes:\n\n```json\n{\n  \"images\": [\"<base64-encoded PNG>\", \"...\"]\n}\n```\n\n**Gemini** additionally returns `finish_reason` — the model's own completion\nverdict, forwarded verbatim from upstream. `\"STOP\"` is a normal generation; the\nfield is null when upstream reported none, and it is absent on every non-Gemini\nimage model. Token counts are deliberately not returned: these models bill\nper image, not per token.\n\n```json\n{\n  \"images\": [\"<base64-encoded PNG>\"],\n  \"finish_reason\": \"STOP\"\n}\n```\n\nWhen a request produces no image at all, that verdict comes back under\n`error.detail` instead, alongside `block_reason` and any reply the model wrote\nin words — see [Errors](../reference/errors.md#error-codes) for\n`CONTENT_POLICY_DECLINED`, `IMAGE_TEXT_RESPONSE` and `IMAGE_NO_OUTPUT`. Note\nthat `finish_reason: \"STOP\"` on its own does not mean an image was produced.\n\n**Qwen, Seedream and Wan2.7** instead return Relay-hosted image URLs in a `urls` array:\n\n```json\n{\n  \"urls\": [\"https://cdn.relaygpu.com/content/0jTz5Ht994t1szRMSgF1JQ\", \"...\"]\n}\n```\n\nThose links live **1 hour** by default, alongside the task record. Add\n`store_output: relay1d`, `relay7d` or `relay30d` to keep both for 1, 7 or 30\ndays for a flat per-file fee — see [Video → How long the link lives](video.md)\nand `media_storage` in `GET /v2/pricing`.\n\n`store_output` is **not available on the base64 routes above** (gemini,\ngpt-image, FLUX, upscalers): there is no link to host, so a `relay*` value\nreturns `422` naming the model. Which models offer it is published per model as\n`store_output_supported` in `GET /v2/models`, so you can check before you send.\nThe default `provider` is accepted everywhere."
+  },
+  {
+   "page": "endpoints/images.md",
+   "title": "Images",
+   "heading": "Multi-image editing (Gemini 3 Pro)",
+   "anchor": "multi-image-editing-gemini-3-pro",
+   "text": "`google/gemini-3-pro-image` can take up to **14** reference images in one\nrequest and edit across them — compositing, colour-matching, style transfer\nbetween sources. Pass them as `images` instead of the single `image` field:\n\n```bash\ncurl -X POST https://relaygpu.com/v2/image/gemini-3/generate \\\n  -H \"X-API-Key: YOUR_KEY\" \\\n  -H \"Content-Type: application/json\" \\\n  -d '{\"model\": \"google/gemini-3-pro-image\",\n       \"prompt\": \"Repaint the blue wall in the first image using the exact orange colour of the second image. Keep everything else identical.\",\n       \"images\": [\"<base64 PNG>\", \"<base64 PNG>\"],\n       \"image_size\": \"1K\"}'\n```\n\nRules:\n\n- `image` and `images` are **mutually exclusive** — sending both is a `422`.\n- `images` accepts **1-14** items; outside that range is a `422`.\n- Each item is raw base64 or a data URI (`data:image/png;base64,...`), same\n  encoding as `image`.\n- **Gemini 3 Pro only.** `gemini-2.5-flash-image` and\n  `gemini-3.1-flash-image-preview` take a single `image`; sending `images` to\n  either is a `422`.\n- Prompt ordering matters — refer to sources positionally (\"the first image\",\n  \"the second image\").\n\nBilling is per output resolution tier, unchanged by the number of references."
+  },
+  {
+   "page": "endpoints/images.md",
+   "title": "Images",
+   "heading": "GPT Image 2 and 2.5",
+   "anchor": "gpt-image-2-and-25",
+   "text": "Three models on one route; `model` picks between them and defaults to\n`openai/gpt-image-2`. The body is identical for all three — `prompt` alone for\ntext-to-image, plus a base64 `image` (and optional `mask`) to edit, or a list of\nbase64 `image`s to compose.\n\n| `model` | Billed |\n|---|---|\n| `openai/gpt-image-2` | per image, at the requested `size` |\n| `openai/gpt-image-2.5-sunburst` | per token |\n| `openai/gpt-image-2.5-flare` | per token |\n\n```bash\ncurl -X POST https://relaygpu.com/v2/image/gpt-image-2/generate \\\n  -H \"X-API-Key: YOUR_KEY\" \\\n  -H \"Content-Type: application/json\" \\\n  -d '{\"model\": \"openai/gpt-image-2.5-sunburst\",\n       \"prompt\": \"A single green pear on a wooden table, soft window light\",\n       \"size\": \"1536x1024\"}'\n```\n\nOn the 2.5 variants `size` asks for a resolution; it does not set the price.\nWhat you pay follows the input and output tokens the model reports, at the rates\nin `GET /v2/pricing` — so a larger `size` costs more only insofar as it takes\nmore output tokens to draw, and `n` multiplies the bill the same way it does\neverywhere.\n\nAll three return their images inline as base64, so `store_output` has nothing to\nhost — `relay1d`/`relay7d`/`relay30d` return `422`."
+  },
+  {
+   "page": "endpoints/images.md",
+   "title": "Images",
+   "heading": "Seedream 5.0 Pro",
+   "anchor": "seedream-50-pro",
+   "text": "ByteDance's flagship image model: text-to-image, and editing or composition\nfrom up to 14 reference pictures. Unlike the other image routes it returns\n**links**, not inline base64 — so `store_output` genuinely applies here (see\n[the note above](#example)).\n\n```bash\ncurl -X POST https://relaygpu.com/v2/image/seedream-5-0-pro/generate \\\n  -H \"X-API-Key: YOUR_KEY\" \\\n  -H \"Content-Type: application/json\" \\\n  -d '{\"prompt\": \"A watercolor fox sitting under a maple tree, autumn colors\",\n       \"size\": \"2048x2048\"}'\n```\n\n```json\n{\n  \"urls\": [\"https://cdn.relaygpu.com/content/...\"],\n  \"model\": \"ByteDance/doubao-seedream-5-0-pro-260628\",\n  \"size\": \"2048x2048\"\n}\n```"
+  },
+  {
+   "page": "endpoints/images.md",
+   "title": "Images",
+   "heading": "Sizing and what it costs",
+   "anchor": "sizing-and-what-it-costs",
+   "text": "`size` takes either a preset or exact pixels:\n\n| Value | Meaning | Bills at |\n|---|---|---|\n| `1K` | ~1.0MP, aspect chosen from the prompt | `1K` rate |\n| `2K` | ~4.2MP, aspect chosen from the prompt | `2K` rate |\n| `<width>x<height>` | exact, e.g. `1920x1080` | `1K` at or below 1024x1024 in **total area**, `2K` above |\n\nThe default is `2048x2048`. Total area must not exceed 4,624,220 pixels\n(~4.6MP) — the published 4K tier is not available on the pro variant, and a\nlarger request is a `422` naming the size. Rates are on `/v2/pricing`."
+  },
+  {
+   "page": "endpoints/images.md",
+   "title": "Images",
+   "heading": "References",
+   "anchor": "references",
+   "text": "Pass 1-14 pictures in `images`, each an https URL or a data URI:\n\n```bash\ncurl -X POST https://relaygpu.com/v2/image/seedream-5-0-pro/generate \\\n  -H \"X-API-Key: YOUR_KEY\" \\\n  -H \"Content-Type: application/json\" \\\n  -d '{\"prompt\": \"Repaint the wall in the first image using the exact colour of the second image. Keep everything else identical.\",\n       \"images\": [\"https://cdn.relaygpu.com/content/Usw6wp8ht34vuLTPh6XHWA\",\n                  \"https://cdn.relaygpu.com/content/fZqlx8XpM0z1nwLfHL9rhQ\"],\n       \"size\": \"2K\"}'\n```\n\nRefer to sources positionally in the prompt (\"the first image\"). Billing is per\noutput resolution tier, unchanged by the number of references.\n\n`watermark` (default `false`) adds the upstream's AI-generated mark;\n`output_format` is `jpeg` (default) or `png`."
+  },
+  {
+   "page": "endpoints/images.md",
+   "title": "Images",
+   "heading": "Wan 2.7 Image Pro",
+   "anchor": "wan-27-image-pro",
+   "text": "Alibaba's Wan2.7: text-to-image, editing, and fusing several pictures into one.\nLike Seedream it returns **links** rather than inline base64, so `store_output`\napplies here.\n\nOne route covers three jobs, chosen by what you send — at least one of\n`prompt`, `image` or `images` is required:\n\n| You send | You get |\n|---|---|\n| `prompt` | text-to-image |\n| `prompt` + `image` | that one picture, edited |\n| `prompt` + `images` | several pictures fused or edited together |\n\n```bash\ncurl -X POST https://relaygpu.com/v2/image/wan-2-7-image-pro/generate \\\n  -H \"X-API-Key: YOUR_KEY\" \\\n  -H \"Content-Type: application/json\" \\\n  -d '{\"prompt\": \"A lighthouse on a rocky coast at dusk, warm lamplight, painterly style\",\n       \"size\": \"1K\"}'\n```\n\n```json\n{\n  \"urls\": [\"https://cdn.relaygpu.com/content/...\"],\n  \"model\": \"Wan-AI/Wan2.7-Image-Pro\",\n  \"size\": \"1K\"\n}\n```"
+  },
+  {
+   "page": "endpoints/images.md",
+   "title": "Images",
+   "heading": "Sizing and what it costs",
+   "anchor": "sizing-and-what-it-costs-1",
+   "text": "`size` takes the preset `1K`, `2K` or `4K`, or exact pixels as `2048x2048`.\nOmit it and the upstream picks. **The price is the same at every size** — so\nunlike Seedream, sizing here is purely a quality choice.\n\nWhat *does* change the price is `n`: **every image returned is billed**, so\n`n: 4` costs four times `n: 1` — and if you also pass `store_output`, four\nstorage fees with it. `n` is 1–4 normally; `enable_sequential` raises the cap\nto 16 for generating a related series rather than variations. Above those\nbounds the request is a `422` rather than a surprise on your bill.\n\n```bash\ncurl -X POST https://relaygpu.com/v2/image/wan-2-7-image-pro/generate \\\n  -H \"X-API-Key: YOUR_KEY\" \\\n  -H \"Content-Type: application/json\" \\\n  -d '{\"prompt\": \"Place the subject of the first image into the setting of the second, matching the light\",\n       \"images\": [\"https://cdn.relaygpu.com/content/Usw6wp8ht34vuLTPh6XHWA\",\n                  \"https://cdn.relaygpu.com/content/fZqlx8XpM0z1nwLfHL9rhQ\"],\n       \"size\": \"2K\"}'\n```\n\nRefer to sources positionally in the prompt (\"the first image\"). `seed` makes a\nresult reproducible, `watermark` (default `false`) adds the upstream's\nAI-generated mark, and `thinking_mode` trades speed for a more considered\ncomposition."
+  },
+  {
+   "page": "endpoints/images.md",
+   "title": "Images",
+   "heading": "Upscaling",
+   "anchor": "upscaling",
+   "text": "**Currently unavailable: no Real-ESRGAN model is being served right now, and\nevery request returns `403 MODEL_NOT_AVAILABLE`.** The contract below stays as\ndocumented and works as-is once a provider returns.\n\nReal-ESRGAN raises the resolution of an existing image. There is no prompt —\nthe output is the input multiplied by the model's fixed scale factor:\n\n| Model | Scale | Best for |\n|---|---|---|\n| `TencentARC/RealESRGAN-x4plus` | 4x | photographic (default) |\n| `TencentARC/RealESRGAN-x2plus` | 2x | thumbnails, bulk catalog work |\n| `TencentARC/RealESRGAN-x4plus-anime` | 4x | anime and illustration |\n\nPass exactly one of `image_url` or `image_b64`. Limits: 20MB input file,\n16MP input pixels. `output_format` accepts `png` (default), `jpeg`, `jpg` or\n`webp` — the alpha channel survives `png` and `webp` only.\n\n```bash\ncurl -X POST https://relaygpu.com/v2/image/realesrgan/upscale \\\n  -H \"X-API-Key: YOUR_KEY\" \\\n  -H \"Content-Type: application/json\" \\\n  -d '{\"image_url\": \"https://cdn.relaygpu.com/content/Usw6wp8ht34vuLTPh6XHWA\",\n       \"model\": \"TencentARC/RealESRGAN-x2plus\"}'\n```\n\nReturns the upscaled image base64-encoded in `images`, alongside the output\ngeometry:\n\n```json\n{\n  \"images\": [\"<base64-encoded PNG>\"],\n  \"model\": \"TencentARC/RealESRGAN-x4plus\",\n  \"width\": 2048,\n  \"height\": 2048,\n  \"scale\": 4\n}\n```\n\nAll image endpoints support `\"async\": true` for longer generations, with\noptional [webhook delivery](../reference/async-webhooks.md) on completion.\n\nFor full parameter details per provider, see the [API Explorer → Image](https://docs.relaygpu.com/reference/api-explorer)."
+  },
+  {
+   "page": "endpoints/images.md",
+   "title": "Images",
+   "heading": "Changes",
+   "anchor": "changes",
+   "text": "- **2026-09-22** — prompt limits are the vendor's or there are none. The GPT\n  Image routes rose from 4,000 to OpenAI's documented **32,000** characters;\n  Gemini, Qwen, Seedream, Wan 2.7 Image Pro and FLUX lost their\n  4,000-character cap entirely. Nothing got stricter: every prompt that worked\n  before still works, and longer ones now reach the provider instead of being\n  refused here."
+  },
+  {
+   "page": "endpoints/instances.md",
+   "title": "Instances",
+   "heading": "Instances",
+   "anchor": "instances",
+   "text": "Rent a machine — a GPU box, an NPU container or a plain CPU server — on the same\nkey and the same wallet you use for inference. You pick a row from the catalog,\nhand us **your** SSH public key, and the instance opens to that key alone. We\nnever generate or hold a private key.\n\nInstances are a partner feature: a key on a tier that is not enabled for them\ngets `403 TIER_FEATURE_UNAVAILABLE`. Talk to us if you want it on your account."
+  },
+  {
+   "page": "endpoints/instances.md",
+   "title": "Instances",
+   "heading": "1. Read the catalog",
+   "anchor": "1-read-the-catalog",
+   "text": "```bash\ncurl https://relaygpu.com/v2/instances/catalog -H \"X-API-Key: relay_sk_...\"\n```\n\nEach row is one rentable thing — the `prescription` is the **whole** hardware\nchoice, so there is nothing to tune:\n\n```json\n{\n  \"prescription\": \"t4-intel-any-8vcpu-32gb-300gb\",\n  \"service_mode\": \"dedicated_machine\",\n  \"kind\": \"gpu\",\n  \"description\": \"1× NVIDIA T4, 8 vCPU, 32 GB RAM, 300 GB disk · dedicated machine\",\n  \"cpu\": {\"model\": \"Intel Xeon\", \"vcpu\": 8},\n  \"ram_gb\": 32,\n  \"gpu\": {\"model\": \"NVIDIA T4\", \"count\": 1, \"memory_gb\": 16},\n  \"disk_gb\": 300,\n  \"regions\": [\"singapore\"],\n  \"default_region\": \"singapore\",\n  \"compatible_images\": [\"ubuntu-gpu\"],\n  \"ssh_key_types\": [\"ssh-ed25519\", \"ssh-rsa\", \"ecdsa-sha2-nistp256\"],\n  \"lifetime\": null,\n  \"billing_modes\": [\n    {\"mode\": \"hourly\", \"period_seconds\": 3600, \"term_seconds\": null,\n     \"rate_per_period\": 0.45, \"default\": true}\n  ],\n  \"is_override\": false,\n  \"last_spawn\": {\"outcome\": \"ready\", \"at\": \"2026-09-16T08:12:44Z\", \"reason\": null},\n  \"availability\": {\"state\": \"available\", \"count\": null, \"checked_at\": \"2026-09-17T09:00:12Z\"}\n}\n```\n\n| Field | What it is |\n|---|---|\n| `service_mode` | `dedicated_machine` (a VM: SSH to a public IP) or `managed_container` (SSH to a hostname and port) |\n| `kind` | `gpu`, `npu` or `cpu` — what the hardware block carries |\n| `default_region` | Where a request lands when it omits `region`; `null` means the platform picks |\n| `ssh_key_types` | The OpenSSH key types this row accepts as `ssh_public_key` |\n| `lifetime` | `{default_hours, max_hours}` where the row caps how long an instance may live; `null` = it lives until you end it |\n| `rate_per_period` | **Your** price per period — a per-customer rate is already applied (`is_override`) |\n| `last_spawn` | How the last attempt on this row went, across all customers: `ready`, `failed` (with the `reason` that customer was given) or `none` |\n| `availability` | Whether the row can be delivered right now — see below |\n\nOnly rows you can actually rent are listed. `GET /v2/instances/images` describes\nthe images in `compatible_images`."
+  },
+  {
+   "page": "endpoints/instances.md",
+   "title": "Instances",
+   "heading": "Images",
+   "anchor": "images",
+   "text": "A row may list several images in `compatible_images`; the **first is the default** —\nthe one to pick when you have no preference. `image` is required on every\nrequest: send the one you want, spelled exactly as the row lists it. An image\nthe row does not list is refused (`422`, `field: image`).\n`GET /v2/instances/images` lists only images some row you can rent launches\nwith: what each one is, its OS, and what it has installed.\n\nAn image is software on the machine, not a service we run for you: nothing\nabout it is tunable on the request, and it never changes the price. Where an\nimage carries an app — Jupyter, ComfyUI, vLLM — you reach it over an SSH tunnel\nwith your own key, and you start it yourself unless the image's description\nsays it starts at boot. For an app listening on port 8188 of a\n`dedicated_machine`:\n\n```bash\nssh -N -L 8188:localhost:8188 root@203.0.113.10\n# then open http://localhost:8188 on your own machine\n```"
+  },
+  {
+   "page": "endpoints/instances.md",
+   "title": "Instances",
+   "heading": "\"Rentable now\"",
+   "anchor": "rentable-now",
+   "text": "`availability.state` is one of three words:\n\n- **`available`** — the supplier said it can deliver this row, in this region, at\n  the moment it was asked. `count`, where a supplier states a number, is how many.\n- **`sold_out`** — it said it cannot.\n- **`unknown`** — nobody has an answer: the supplier exposes no capacity check,\n  it did not answer in time, or capacity reporting is not live yet for this row.\n  **`unknown` is not `sold_out`.** Show the row; just show no badge.\n\n`checked_at` is when the supplier was asked. We refresh on a fixed cadence\n(roughly every two minutes) and cache the answer, so reading the catalog never\nwaits on a supplier and never costs you a call. Two consequences worth designing\nfor: the state can be up to a couple of minutes old, and it is\n**not a reservation** — a rent can still fail after `available`, in which case\nyou get the honest failure reason and nothing is billed."
+  },
+  {
+   "page": "endpoints/instances.md",
+   "title": "Instances",
+   "heading": "2. Rent one",
+   "anchor": "2-rent-one",
+   "text": "```bash\ncurl -X POST https://relaygpu.com/v2/instances \\\n  -H \"X-API-Key: relay_sk_...\" -H \"Content-Type: application/json\" \\\n  -d '{\"prescription\":\"t4-intel-any-8vcpu-32gb-300gb\",\n       \"image\":\"ubuntu-gpu\",\n       \"ssh_public_key\":\"ssh-ed25519 AAAAC3Nza... you@laptop\",\n       \"region\":\"singapore\"}'\n```\n\n```json\n{\"id\": \"inst_9f3c...\", \"status\": \"requested\"}\n```\n\n`202` means the request is recorded, not that the machine exists — provisioning\ntakes a few minutes. Optional fields: `service_mode` (required only when the\nprescription is offered in more than one), `billing_mode` (defaults to the row's\ndefault), `region` (defaults to `default_region`), `max_lifetime_hours` (only on\nrows with a `lifetime`), and `webhook_url` for a signed push on\n`instance.ready` / `instance.failed` / `instance.terminated`, plus\n`instance.warning` (your balance fell below your warning threshold) and\n`instance.grace` (a grace countdown started, where one is configured).\n`prescription`, `image` and `ssh_public_key` are required.\n\n`ssh_public_key` is one OpenSSH public-key line whose type is in the row's\n`ssh_key_types`. It is the only way in: no password, no second key."
+  },
+  {
+   "page": "endpoints/instances.md",
+   "title": "Instances",
+   "heading": "3. Poll it",
+   "anchor": "3-poll-it",
+   "text": "```bash\ncurl https://relaygpu.com/v2/instances/inst_9f3c... -H \"X-API-Key: relay_sk_...\"\n```\n\n`status` runs `requested` → `provisioning` → `ready` → `terminating` →\n`terminated`, or `failed`. From `ready` the instance carries `connection`,\nshaped by its `service_mode`:\n\n```json\n{\"status\": \"ready\",\n \"prescription\": \"t4-intel-any-8vcpu-32gb-300gb\",\n \"display_name\": \"T4 · dedicated machine\",\n \"kind\": \"gpu\",\n \"connection\": {\"public_ip\": \"203.0.113.10\", \"port\": 22, \"user\": \"root\"},\n \"ssh_key_fingerprint\": \"SHA256:...\",\n \"expires_at\": null, \"rate_per_period\": 0.45,\n \"hours_billed\": 1.0, \"spend_usd\": 0.45}\n```\n\nWhich is `ssh root@203.0.113.10` for a `dedicated_machine`, and\n`ssh -p <port> <user>@<hostname>` for a `managed_container`.\n\nAn instance also says what it **is** and what it **costs**, so a card never has\nto join the catalog to draw itself:\n\n| Field | What it is |\n|---|---|\n| `display_name` | The row's name as it read when you rented it, kept on the instance — so it survives the row being retired or withdrawn. `null` on instances requested before we recorded it |\n| `kind` | `gpu`, `npu` or `cpu`, likewise |\n| `rate_per_period` | **Your** price for the next period this instance bills — the same number the meter charges, per-customer rate already applied. `null` when nothing prices the row any more, in which case nothing is billed either |\n\nEvery timestamp here is UTC with a trailing `Z`\n(`2026-09-17T19:18:32.678686Z`).\n\n`GET /v2/instances` lists yours, newest first. Scope it:\n\n| Parameter | Value |\n|---|---|\n| `status` | Exact statuses, comma-separated (`ready,failed`), and/or the group words `current` (requested, provisioning, ready, terminating) and `ended` (terminated, failed) |\n| `limit` | Page size, 1–500; without it you get the 200 newest |\n| `starting_after` | An instance id — the page continues after it. Must be one of yours, otherwise `400` |\n\n```bash\ncurl \"https://relaygpu.com/v2/instances?status=current&limit=20\" -H \"X-API-Key: relay_sk_...\"\n```\n\n`count` is how many rows came back, `total` how many match the filter; when\n`has_more` is true, pass `next_cursor` as `starting_after` for the next page.\n\n```bash\n# page one, then the next one\ncurl \"https://relaygpu.com/v2/instances?status=ended&limit=20\" -H \"X-API-Key: relay_sk_...\"\n# → {\"count\": 20, \"total\": 57, \"has_more\": true, \"next_cursor\": \"inst_8f3c...\", ...}\ncurl \"https://relaygpu.com/v2/instances?status=ended&limit=20&starting_after=inst_8f3c...\" \\\n  -H \"X-API-Key: relay_sk_...\"\n```\n\nRepeat until `has_more` is false, where `next_cursor` is `null`. `total` counts\nthe filter, not the page, so it is the same number on every page of a walk —\nthe cursor does not narrow it. The cursor is a *position* in the order (newest\nfirst), not\na member of the filter: an instance that is still running is a valid\n`starting_after` for `?status=ended`, and a row that ends between two of your\npages does not shift the one you ask for next."
+  },
+  {
+   "page": "endpoints/instances.md",
+   "title": "Instances",
+   "heading": "When the wallet runs out",
+   "anchor": "when-the-wallet-runs-out",
+   "text": "While a grace countdown is running — your balance went below zero and we are\ncounting down to ending every instance you hold — the list carries one extra\nblock:\n\n```json\n{\"wallet\": {\"balance\": -0.40, \"warning_threshold\": 0,\n            \"grace_started_at\": \"2026-09-17T11:00:00Z\",\n            \"grace_ends_at\": \"2026-09-18T11:00:00Z\",\n            \"hours_left\": 0.0}}\n```\n\n`grace_ends_at` is when that happens unless you top up. `hours_left` is\n**wallet-wide**: your balance divided by the hourly cost of every instance you\nhold alive, not just the rows this call returned.\n\nOutside a countdown `wallet` is `null` — including when you are merely under\nyour warning threshold, where `/v2/customer/credits` already has the balance\nand the threshold. A single instance (`GET /v2/instances/{id}`) never carries\nit: it is a fact about your wallet, not about one machine.\n\nWhen the grace window is off (`billing.grace_hours` is `0` in the catalog\nresponse) there is no countdown to announce and none is sent: an instance simply ends at the boundary its balance could not cover, and\nthat boundary is its `terminate_requested_at`. When a countdown IS configured,\nit ends your instances at `grace_ends_at` — the instant the window runs out,\nnot whenever we next look."
+  },
+  {
+   "page": "endpoints/instances.md",
+   "title": "Instances",
+   "heading": "4. End it",
+   "anchor": "4-end-it",
+   "text": "```bash\ncurl -X POST https://relaygpu.com/v2/instances/inst_9f3c.../terminate \\\n  -H \"X-API-Key: relay_sk_...\"\n```\n\n`202` and `status: terminating`; we execute it within about half a minute.\nBilling stops at **your request**, not at the shutdown. Asking twice, or asking\nabout an instance that already ended, is a `200` with the current status.\n\nEnding is available once the instance is `ready`. While it is still\n`requested` or `provisioning` the call answers `409 INSTANCE_NOT_READY`:\nnothing is billed before ready, and a request that never gets there fails on\nits own and costs nothing."
+  },
+  {
+   "page": "endpoints/instances.md",
+   "title": "Instances",
+   "heading": "5. What it costs",
+   "anchor": "5-what-it-costs",
+   "text": "```bash\ncurl \"https://relaygpu.com/v2/instances/usage?from=2026-09-01T00:00:00Z\" \\\n  -H \"X-API-Key: relay_sk_...\"\n```\n\nPer instance: billed periods, hours, your rate and spend, and when its first\nand latest billed periods started (`first_period_start`, `last_period_start`),\nplus totals. `totals.spend` is exactly what your wallet paid for instances.\n\n| Term | Rule |\n|---|---|\n| Unit | One billing period — an hour on `hourly`; a prepaid mode charges its whole term up front |\n| Starts | When the instance reaches `ready`. A request that never gets there costs nothing |\n| Ends | The earliest of your terminate request, the supplier ending it, `expires_at` — and, with no grace, the start of the first period your real balance could not cover |\n| Rounding | Every period that starts is charged in full. Nothing is pro-rated |\n| Up front | Your real balance must cover `min_commit_hours` at the row's rate before a request is accepted, and every later period starts only if your real balance covers it — otherwise your instances end (`balance_exhausted`) and nothing is charged for the period that did not start. Promo credits never apply to instances |\n| Currency | USD, from the same wallet as inference (`consumed_by_mode.instances`) |\n\nThe live numbers for `min_commit_hours` and the grace window are in the\n`billing` block of the catalog response."
+  },
+  {
+   "page": "endpoints/instances.md",
+   "title": "Instances",
+   "heading": "Refusals",
+   "anchor": "refusals",
+   "text": "| Status | `error.code` | When |\n|---|---|---|\n| 403 | `TIER_FEATURE_UNAVAILABLE` | Your tier is not enabled for instances (a request with no key included) |\n| 422 | `VALIDATION_ERROR` | A field the request got wrong — `error.detail.field` names it: an unknown prescription, a `service_mode` the prescription is not offered as, an incompatible `image`, a `region` the row does not have, a key type the row does not accept, an unpriced `billing_mode`, `max_lifetime_hours` on a row with no cap or outside it, or a row that **is no longer offered** |\n| 402 | `INSUFFICIENT_CREDITS` | Your real balance does not cover the up-front commitment; the detail carries `required_usd` and `balance_usd`. A wallet already below its credit limit is refused earlier, with a plain message |\n| 429 | `INSTANCE_LIMIT` | You already hold the maximum number of live instances |\n| 429 | `RATE_LIMITED` | Too many create/terminate calls this hour; `Retry-After` is set |\n| 404 | `INSTANCE_NOT_FOUND` | No instance with that id belongs to you |\n| 409 | `INSTANCE_NOT_READY` | Terminate on an instance still `requested` or `provisioning`. Ending becomes available at `ready`; nothing is billed before then, and a request that never gets there costs nothing |\n| 503 | `INSTANCES_UNAVAILABLE` | Instances are not available right now. When the catalog is only temporarily unreadable, `Retry-After` is set; without it, contact support |\n\nEvery refusal on the create path happens **before** anything is provisioned, so\nnothing is running and nothing is billed.\n\nA row can be retired: it leaves the catalog, and renting it answers\n`422` — `'<prescription>' (<service_mode>) is no longer offered`. Instances you\nalready hold on a retired row keep running, and keep billing at the rate you\nrented them at, until you end them."
+  },
+  {
+   "page": "endpoints/instances.md",
+   "title": "Instances",
+   "heading": "Changes",
+   "anchor": "changes",
+   "text": "- **2026-09-24** — a row may list more than one image in `compatible_images`;\n  the first is the default, and `image` takes the name exactly as the row\n  lists it. `GET /v2/instances/images` now lists only images a row you can\n  rent launches with (before, it could list an image no such row offered).\n  The first such image is `comfyui` (ComfyUI, started at boot on port 8188,\n  with JupyterLab installed) on the rows whose disk holds it. See\n  [Images](#images).\n\n- **2026-09-21** — `GET /v2/instances` pages. `starting_after` takes an\n  instance id and continues after it; the response adds `has_more`,\n  `next_cursor` and `total` (how many match the filter — `count` still means\n  the rows in front of you). Nothing was removed and no default changed: a\n  call that names no `starting_after` answers exactly as before.\n\n- **2026-09-19** — a period now starts only if your real balance covers it.\n  When it does not, nothing is inserted and nothing is charged for that\n  period: your instances end with `balance_exhausted` instead of running an\n  hour you owe for, and their `terminate_requested_at` is that boundary —\n  billing ends where your balance stopped covering it. Periods already\n  started are still billed in full. With the grace window off\n  nothing announces a countdown any more: you get `instance.terminated` with\n  `ended_reason: balance_exhausted` rather than an `instance.grace` event\n  whose countdown was already over. Where a countdown IS configured, it now\n  ends instances at `grace_ends_at` itself rather than at the next check, so a\n  period starting in between is neither started nor billed. Also: the single\n  instance view no longer carries a `wallet` key; the list still does while a\n  countdown runs. Terminate is available from `ready` on: before that the\n  call answers `409 INSTANCE_NOT_READY` (nothing is billed before ready).\n  Usage rows carry `first_period_start` and `last_period_start`.\n\n- **2026-09-17** — every timestamp on this surface now ends in `Z`\n  (`2026-09-17T19:18:32.678686Z`); the `+00:00` spelling is gone. Instances\n  carry `display_name`, `kind` and `rate_per_period`, and the list carries\n  `wallet` while a grace countdown runs. Nothing was renamed or removed."
+  },
+  {
+   "page": "endpoints/models.md",
+   "title": "Models & Pricing",
+   "heading": "Models & Pricing",
+   "anchor": "models-pricing",
+   "text": "The model list and the rates change as models are added and retired, so read\nthem live from these two endpoints rather than hard-coding them. Neither needs\nauthentication."
+  },
+  {
+   "page": "endpoints/models.md",
+   "title": "Models & Pricing",
+   "heading": "Models",
+   "anchor": "models",
+   "text": "List every available model.\n\n```bash\ncurl https://relaygpu.com/v2/models\n```\n\nReturns models grouped by mode and source, plus a `model_restrictions_per_tier` map.\n\n```json\n{\n  \"auto\": {\n    \"video\": [\n      {\"name\": \"ByteDance/doubao-seedance-2-0-mini-260615\", \"tag\": \"text-to-video\", \"display_name\": \"Seedance 2.0 Mini\", \"store_output_supported\": true,\n       \"endpoint\": {\"method\": \"POST\", \"path\": \"/v2/video/doubao-seedance-2.0-mini/generate\", \"operation_id\": \"video_doubao_seedance_2_0_mini_generate\", \"model_in_body\": false, \"model_default\": null, \"async_default\": true, \"streams\": false}}\n    ]\n  }\n}\n```\n\n**`endpoint`:** the route that serves this model, so a name is all you need to build a request. One model at a time, with its route, the request body's JSON Schema, a runnable example, what it returns, modes, list price and availability: `GET /v2/models/{model}`. Both are described in [Models](../reference/models.md).\n\n**`store_output_supported`:** whether this model's response carries a media link\nRelay can re-host, and therefore whether it accepts\n[`store_output`](video.md#how-long-the-link-lives). Always present. `false` means\nthe model returns its media inline (base64), or has not declared the field — a\n`relay1d`/`relay7d`/`relay30d` request returns `422` naming the model, while the\ndefault `provider` still works. Under `auto` the value is what **every** mode\nhosting the model offers, since `auto` may route to any of them.\n\n**`name` vs `display_name`:** `name` is the canonical identity — send it as `model`, and scopes and billing key off it. `display_name` is the presentation string: **render it verbatim, never transform it**, and fall back to `name` when it is absent (the field is emitted only for models that have one stored). It is never accepted as an identity — a request naming a model by its display name is rejected exactly like any unknown model.\n\n`display_name` carries NO stability contract (mutable presentation data — never key/join/cache on it). It can be re-worded at any time; `name` is the only value that is safe to store, compare or join on.\n\n**Note:** `model_restrictions_per_tier` is a public reference matrix: the same response is returned to every caller, authenticated or not. Each row lists the `mode.source.model` scopes that tier **cannot** call; the `guest` row describes unauthenticated callers, not you. To find your own tier, call [`GET /v2/tiers`](../introduction/authentication.md#access-tiers) with your API key (`current_tier`), or `GET /v2/customer/profile` with your dashboard login, which also returns your credit balance (see [API Keys & Account](../reference/keys.md#your-profile))."
+  },
+  {
+   "page": "endpoints/models.md",
+   "title": "Models & Pricing",
+   "heading": "Pricing",
+   "anchor": "pricing",
+   "text": "List pricing for all available models. No authentication required.\n\n```bash\ncurl https://relaygpu.com/v2/pricing\n```\n\nReturns a flat `pricing` array (one entry per mode/model), each tagged with its `billing_type` (per_token, per_image, per_second_video, ...) and only the rate fields relevant to that type.\n\nExample response (one entry per billing type; the rates are illustrative, read the live ones from the endpoint):\n\n```json\n{\n  \"pricing\": [\n    {\"mode\":\"direct\",\"model\":\"anthropic.anthropic/claude-fable-5\",\"billing_type\":\"per_token\",\"per_1m_input_tokens\":10.0,\"per_1m_output_tokens\":50.0,\"per_1m_cached_input_tokens\":1.0,\"per_1m_cache_write_5m_input_tokens\":12.5,\"per_1m_cache_write_1h_input_tokens\":20.0},\n    {\"mode\":\"direct\",\"model\":\"audio.IndexTeam/IndexTTS-2\",\"billing_type\":\"per_character\",\"per_1k_characters\":0.0056},\n    {\"mode\":\"direct\",\"model\":\"image.Qwen/qwen-image\",\"billing_type\":\"per_image\",\"per_image\":0.036},\n    {\"mode\":\"direct\",\"model\":\"video.Wan-AI/Wan2.5-T2V\",\"billing_type\":\"per_second_video\",\"per_second_video\":{\"480p\":0.05,\"720p\":0.1}}\n  ],\n  \"total_count\": 4\n}\n```"
+  },
+  {
+   "page": "endpoints/models.md",
+   "title": "Models & Pricing",
+   "heading": "Output media storage fees",
+   "anchor": "output-media-storage-fees",
+   "text": "The same response carries a `media_storage` block: the per-file fee for keeping a\nmedia result on Relay's CDN beyond the default hour, one entry per `store_output`\noption. An option **absent** from the block is not offered right now, and a request\nnaming it returns `422`.\n\n```json\n{\n  \"media_storage\": {\"relay1d\": 0.0005, \"relay7d\": 0.001, \"unit\": \"per_file\"}\n}\n```\n\n`unit` is `per_file`: a generation with three outputs stored for 7 days is charged\nthree times the `relay7d` fee, on top of the model's own price. Enterprise accounts\nsee their negotiated rates on `GET /v2/customer/pricing`. What the option does and\nhow long links live: [Video → How long the link lives](video.md#how-long-the-link-lives).\n\nThe same fees apply to files you upload yourself: a [Files](files.md) upload with\n`retention: relay1d`, `relay7d` or `relay30d` is charged the matching per-file fee\nfrom this block, exactly as a stored result is. `relay1h` uploads are free.\n\nRates are in USD. For full details, see the [API Explorer → Info](https://docs.relaygpu.com/reference/api-explorer)."
+  },
+  {
+   "page": "endpoints/video.md",
+   "title": "Video",
+   "heading": "Video",
+   "anchor": "video",
+   "text": "Generate videos from text prompts (T2V), images (I2V) or other videos. Call\nthe routes with an API key or as a guest on guest-enabled models. Generation\ntakes 2–20 minutes, so **video requests are asynchronous by default**: the call\nreturns `202` with a `task_id` immediately, and you poll for the result (no\nauth header needed) or receive a webhook. Pass `\"async\": false` to block and\nwait for the full response instead (not recommended at these runtimes)."
+  },
+  {
+   "page": "endpoints/video.md",
+   "title": "Video",
+   "heading": "Model families",
+   "anchor": "model-families",
+   "text": "Several video model families are available (**Kling, Wan, Seedance, Veo,\nHappyHorse, Lucy and Bria**), each with its own route(s) under `/v2/video/...`\n(text-to-video, image-to-video, video-to-video, and unified generate routes,\ndepending on the model). The exact routes and parameters are listed in the\n[API Explorer → Video](https://docs.relaygpu.com/reference/api-explorer); the\nlive model list is [`GET /v2/models`](models.md). Routes the API Explorer marks\n**retired** stay documented but answer `403`.\n\nImage-conditioned models accept the reference image as a URL **or** a base64 data URI.\n\nVideo-to-video routes take a source video as well: Lucy 2.5 restyles one\n(Lucy VTON 3 is retired), the Bria upscaler doubles its resolution, and\n`POST /v2/video/kling-3/motion-control` transfers the motion of a person in a\nreference video onto a character image.\n\n**Prompt length.** The Kling routes accept up to **2,500** characters in\n`prompt` and `negative_prompt` — Kling's own published limit. No other video\nmodel has a limit of ours: send the prompt you need, and if it is too long for\nthe provider, the provider's own refusal comes back to you as a `400`."
+  },
+  {
+   "page": "endpoints/video.md",
+   "title": "Video",
+   "heading": "Source video and audio inputs",
+   "anchor": "source-video-and-audio-inputs",
+   "text": "A source **video or audio** file is taken by URL only — these fields do not\naccept base64. Local file? Upload it with [Files](files.md) and pass the\nreturned `url`.\n\n| Route | URL-only fields |\n|---|---|\n| `POST /v2/video/wan-25/t2v`, `/wan-25/i2v`, `/wan-26/t2v` | `audio_url` |\n| Seedance 2.0 routes (`/v2/video/doubao-seedance-2.0…/generate`) | `reference_video_url`, `reference_audio_url` |\n| Seedance 2.5 video-to-video (`/v2/video/doubao-seedance-2.5-v2v/generate`) | `reference_video_url`, `reference_audio_url` |\n| Seedance 2.5 (`/v2/video/doubao-seedance-2.5/generate`) | `reference_audio_url` |\n| `POST /v2/video/happyhorse-1.0/video-edit` | `video_url` |\n| `POST /v2/video/lucy-2.5/generate` | `video_url` |\n| `POST /v2/video/bria-upscale/generate` | `video_url` |\n| `POST /v2/video/kling-3/motion-control` | `video_url` |\n| `POST /v2/video/kling-o1/generate` | `base_video_url`, `reference_video_url` |"
+  },
+  {
+   "page": "endpoints/video.md",
+   "title": "Video",
+   "heading": "Example",
+   "anchor": "example",
+   "text": "```bash\ncurl -X POST https://relaygpu.com/v2/video/kling-3/t2v \\\n  -H \"X-API-Key: YOUR_KEY\" \\\n  -H \"Content-Type: application/json\" \\\n  -d '{\"prompt\": \"A robot waving a flag\"}'\n```\n\n**Response:**\n```json\n{\"task_id\": \"direct:abc12345-...\", \"status\": \"queued\", \"poll_url\": \"/v2/tasks/direct:abc12345-...\"}\n```\n\n**Poll for result** (no auth required):\n```bash\ncurl https://relaygpu.com/v2/tasks/direct:abc12345-...\n```\n\nWhen the task completes, the `result` (returned by the poll and the webhook) holds\nRelay-hosted video URLs:\n```json\n{\"videos\": [\"https://cdn.relaygpu.com/content/0jTz5Ht994t1szRMSgF1JQ\"]}\n```\nThe videos are URLs; fetch them to download the generated files. Range requests\nare supported, so a player can seek without downloading the whole file."
+  },
+  {
+   "page": "endpoints/video.md",
+   "title": "Video",
+   "heading": "How long the link lives",
+   "anchor": "how-long-the-link-lives",
+   "text": "By default your output link and task record live **1 hour**. Choose\n`store_output: relay1d`, `relay7d` or `relay30d` and both live for the full 1, 7\nor 30 days — the task stays pollable and the output stays served from Relay's\nCDN — for a flat per-file fee.\n\n```bash\ncurl -X POST https://relaygpu.com/v2/video/wan-25/t2v \\\n  -H \"X-API-Key: relay_sk_...\" -H \"Content-Type: application/json\" \\\n  -d '{\"prompt\":\"a red cube rotating\",\"store_output\":\"relay7d\"}'\n```\n\n- The fee is charged **per output file**, so a multi-output generation is\n  charged per output. Current rates and the options available to you are in\n  `media_storage` at [`GET /v2/pricing`](models.md) — an option missing from\n  that block is not offered and returns `422`.\n- After the link expires, `GET` on it returns **404**, and so does\n  `GET /v2/tasks/{task_id}`. The work was still billed.\n- The guest tier cannot use `store_output`; the default `provider` still returns\n  a Relay-hosted link.\n- Not every model offers storage: some return their media inline, with no link\n  to host. `GET /v2/models` carries `store_output_supported` per model, and a\n  `relay*` value on a model that says `false` returns `422` naming it. The\n  default `provider` works on every model either way.\n- If the storage step fails, you still get a working 1-hour link and **no fee** —\n  a generation is never failed or re-billed over hosting.\n- On a **synchronous** request (`\"async\": false`) storage runs inside the wait\n  you are already holding, and gets whatever is left of it. Files stored before\n  it closes keep their durable links; any still copying fall back to the 1-hour\n  link, with no fee for those. Your generation is never held up or failed\n  waiting on hosting. Async requests — the default for video — have no such\n  ceiling, because nothing is waiting on the connection.\n\nPrefer a push? Add a `webhook_url` to the request and we'll POST the result\nto your server when it's done, signed. See\n[Tasks & Webhooks](../reference/async-webhooks.md).\n\nFor full parameter details per provider, see the [API Explorer → Video](https://docs.relaygpu.com/reference/api-explorer)."
+  },
+  {
+   "page": "endpoints/video.md",
+   "title": "Video",
+   "heading": "Changes",
+   "anchor": "changes",
+   "text": "- **2026-09-22** — prompt limits are the vendor's or there are none. Kling's\n  `prompt` and `negative_prompt` rose from 2,000 to the published **2,500**;\n  Wan, Wan 2.6 and Seedance lost their 2,000-character `prompt` cap and their\n  1,000-character `negative_prompt` cap entirely. Nothing got stricter: every\n  prompt that worked before still works, and longer ones now reach the\n  provider instead of being refused here."
+  },
+  {
+   "page": "endpoints/workflows.md",
+   "title": "Workflows",
+   "heading": "Workflows",
+   "anchor": "workflows",
+   "text": "Chain several models into one call. A **workflow** is a curated template —\n\"write this line, then speak it\", \"enhance this prompt, then generate the\nimage\" — that we host and version. You send your inputs once, get a `run_id`\nback, and poll it until the chain finishes.\n\nAnyone can list the workflows; running one needs an API key (a guest run is\nrefused with `403`). Like a task, a run is polled without an auth header.\n\n**Each step is billed as an ordinary request at that model's normal rate for\nyour account.** There is no workflow surcharge and no markup for chaining, and\nyour usage reports include the steps as ordinary traffic."
+  },
+  {
+   "page": "endpoints/workflows.md",
+   "title": "Workflows",
+   "heading": "The catalog",
+   "anchor": "the-catalog",
+   "text": "| Workflow | Chain |\n|---|---|\n| `script-voiceover` | LLM writes a line → TTS speaks it |\n| `enhance-image` | LLM writes an image prompt → image model renders it |\n| `enhance-video` | LLM writes a shot description → video model renders it |\n| `animate-image` | Image model generates a frame → video model animates it |\n| `animate-upscale` | Image model generates → video model animates → upscaler sharpens the clip |\n| `enhance-animate` | LLM writes an image prompt → image model renders it → video model animates it |\n| `gen-edit` | Image model generates → image model edits that image |\n\n`GET /v2/workflows` is the live list — public, no key needed — treat it, not\nthis table, as the source of truth. Each entry carries the `input_schema` your `inputs` must satisfy\n(real JSON Schema), the `steps` naming every model the run will charge you\nfor, and the `version` your run gets pinned to — a run that starts on v2\nfinishes on v2. Chains that open with an LLM take a `messages` array (you\nsupply the idea, the workflow supplies the system instruction); the rest take\nplain strings."
+  },
+  {
+   "page": "endpoints/workflows.md",
+   "title": "Workflows",
+   "heading": "Run one",
+   "anchor": "run-one",
+   "text": "```bash\ncurl -X POST https://relaygpu.com/v2/workflows/script-voiceover/run \\\n  -H \"X-API-Key: YOUR_KEY\" -H \"Content-Type: application/json\" \\\n  -d '{\"inputs\": {\n        \"messages\": [{\"role\": \"user\", \"content\": \"One upbeat line about the sea.\"}],\n        \"voice\": \"Serena\"\n      }}'\n# → 202 {\"run_id\": \"wf:...\", \"status\": \"queued\", \"poll_url\": \"/v2/workflows/runs/wf:...\"}\n\ncurl https://relaygpu.com/v2/workflows/runs/wf:...\n# no auth header — the run_id is an unguessable capability token, like a task_id\n```\n\nWorth knowing before you spend anything:\n\n- **Everything is validated before the `202`**: your `inputs` against the\n  workflow's schema (`422`), **every** step's model against your key's scope\n  (`403`), the credit floor for the whole chain (`402`), your tier (`403`),\n  and runs already in flight (`429`). A run whose *second* step would be\n  denied is rejected before the first step costs you anything.\n- **Poll the run**: `queued → running → completed | failed | cancelled`. Each\n  step carries a real `task_id` you can also poll at `GET /v2/tasks/{task_id}`\n  — a workflow step is an ordinary async task we submitted for you.\n- **`output` is the last step's result.** Every intermediate output stays\n  visible under `steps[]` — the enhanced prompt, the still image, whatever a\n  middle step produced.\n- **If a step fails, the run stops.** `failed_step_index` says where. Steps\n  that already succeeded stay billed and their outputs stay visible.\n- **Cancel is between steps only** (`POST .../runs/{run_id}/cancel`, key\n  required): it does **not** stop the step already running — that step\n  completes and bills in full; steps that had not dispatched never do. Same\n  rule as ordinary inference: once a task is with a provider it cannot be\n  called back.\n- **Limits**: a run counts once against your rate limit, at submission — its\n  steps do not. Runs in flight per account are capped (`429` past the cap).\n  Media URLs in outputs are Relay-hosted and live **1 hour** unless you store\n  them (below); the run record itself stays readable after they expire, so\n  download what you need within the hour.\n- **Storage is run-level.** Add `store_output: relay1d`, `relay7d` or\n  `relay30d` to the run body and every step that produces a file stores its\n  output for that long, each charged the flat per-file fee — the same option,\n  the same rates and the same refusals as a single request\n  ([Video → How long the link lives](video.md#how-long-the-link-lives)). Steps\n  that produce text are untouched, and a run is refused up front with `422` if\n  any of its media steps runs a model that does not offer storage, rather than\n  storing some steps and skipping others. There is no per-step override.\n  A stored step stays pollable at `GET /v2/tasks/{task_id}` for as long as its\n  output.\n- **Or be called when it ends.** Add `webhook_url` to the run body and we POST\n  the finished run to it once: `workflow.completed`, or `workflow.failed` for\n  a run that failed or was cancelled (`result.status` says which). The payload\n  carries the run exactly as the poll returns it, signed and retried like task\n  webhooks; the same URL rules apply (`https`, a public host, `422`\n  otherwise). The steps themselves send no webhooks. Details:\n  [Tasks & Webhooks → Workflow run webhooks](../reference/async-webhooks.md#workflow-run-webhooks)."
+  },
+  {
+   "page": "endpoints/workflows.md",
+   "title": "Workflows",
+   "heading": "Today's boundaries",
+   "anchor": "todays-boundaries",
+   "text": "Templates are curated by us (you cannot define your own chain); chains are\nlinear (no branches, conditionals, or parallel steps); no per-step retries or\nfallback models beyond the provider failover every request already gets; no\nstreaming; no mid-step cancellation; no per-step storage override; no\nper-step webhooks (the run sends one when it ends).\n\nNeed one of these, or a chain that isn't in the catalog?\n[Tell us](mailto:info@opengpu.network) — what people ask for drives what we\nadd next."
+  },
+  {
+   "page": "endpoints/workflows.md",
+   "title": "Workflows",
+   "heading": "Reference",
+   "anchor": "reference",
+   "text": "Full request/response shapes, status enums, and per-route error contracts:\n[API Explorer → Workflows](https://docs.relaygpu.com/reference/api-explorer) ·\n[Errors](../reference/errors.md) ·\n[Tasks & Webhooks](../reference/async-webhooks.md)"
+  },
+  {
+   "page": "introduction/authentication.md",
+   "title": "Auth & Access",
+   "heading": "Auth & Access",
+   "anchor": "auth-access",
+   "text": "Relay takes three kinds of credential: an **API key** for inference, a\n**dashboard login (JWT)** for account and key management, and **none** for\nguest access. Which routes take which:\n\n| Credential | Header | Use it for |\n|---|---|---|\n| API key (`relay_sk_...`) | `X-API-Key: relay_sk_...` or `Authorization: Bearer relay_sk_...` | Inference endpoints, Instances |\n| Dashboard JWT | `Authorization: Bearer <jwt>` | Account and key management (`/v2/customer/*`); also inference, billed to your own wallet |\n| Superkey (partner tiers) | `X-API-Key: relay_sk_...` | Account and key management for your end users; see [Enterprise & Partners](../reference/enterprise.md) |\n| None (guest) | — | Inference on guest-enabled models, at a strict rate limit |"
+  },
+  {
+   "page": "introduction/authentication.md",
+   "title": "Auth & Access",
+   "heading": "API keys",
+   "anchor": "api-keys",
+   "text": "Both headers work on every inference endpoint:\n\n```bash\n# Method 1: X-API-Key header\ncurl -X POST https://relaygpu.com/v2/openai/v1/chat/completions \\\n  -H \"X-API-Key: relay_sk_your_key_here\" \\\n  -H \"Content-Type: application/json\" \\\n  -d '{\"model\": \"openai/gpt-5.4\", \"messages\": [{\"role\": \"user\", \"content\": \"Hello\"}]}'\n\n# Method 2: Bearer token (what the OpenAI and Anthropic SDKs send)\ncurl -X POST https://relaygpu.com/v2/openai/v1/chat/completions \\\n  -H \"Authorization: Bearer relay_sk_your_key_here\" \\\n  -H \"Content-Type: application/json\" \\\n  -d '{\"model\": \"openai/gpt-5.4\", \"messages\": [{\"role\": \"user\", \"content\": \"Hello\"}]}'\n```\n\nIf you send both headers, `X-API-Key` wins. A key that is missing, invalid or\nrevoked returns `401`; sending no credential at all makes you a guest.\n\nThe full key secret is shown **once, at creation**; every later listing\nshows it masked. Management calls address a key by its non-secret `key_id`.\nSee [API Keys & Account](../reference/keys.md)."
+  },
+  {
+   "page": "introduction/authentication.md",
+   "title": "Auth & Access",
+   "heading": "Dashboard / JWT auth",
+   "anchor": "dashboard-jwt-auth",
+   "text": "Account and management routes (`/v2/customer/*`) take a **JWT**: the session\ntoken the dashboard holds once you sign in at\n[dashboard.relaygpu.com](https://dashboard.relaygpu.com). Sign-in itself is a\ndashboard flow, not part of the public API. Send the token as\n`Authorization: Bearer <jwt>` on management calls; it is valid for 7 days,\nand signing in again issues a new one. A regular API key cannot call these\nroutes (`403`); on partner tiers the [superkey](../reference/enterprise.md#superkey)\ncan, which is the way to script key management.\n\nA JWT can also call **inference** endpoints directly (`Authorization: Bearer\n<jwt>`), billed to your account's wallet. This is how the dashboard\nplayground works. That usage is attributed to an automatic, read-only system\nkey named `__relayfront__` in your key list; see\n[API Keys & Account](../reference/keys.md#the-__relayfront__-system-key)."
+  },
+  {
+   "page": "introduction/authentication.md",
+   "title": "Auth & Access",
+   "heading": "Guest mode",
+   "anchor": "guest-mode",
+   "text": "No key required: omit both headers. Guests get the strictest rate limit, and\nsome models are key-only; a guest request for one returns `403`. Guests cannot\nuse `store_output` or prompt caching. `model_restrictions_per_tier.guest` in\n[`GET /v2/models`](../endpoints/models.md) lists the models guests cannot call."
+  },
+  {
+   "page": "introduction/authentication.md",
+   "title": "Auth & Access",
+   "heading": "Access tiers",
+   "anchor": "access-tiers",
+   "text": "Every account is on a tier (`basic`, `pro`, `max`, or a custom partner tier;\ncallers without a key are `guest`). A tier sets how many keys you can hold,\nyour requests-per-minute limits per mode, and which models you can call.\nThe numbers are tuned over time, so read them live:\n\n```bash\ncurl https://relaygpu.com/v2/tiers\n# → {\"tiers\": [{\"tier\": \"basic\", \"max_keys\": ..., \"rate_limits\": {\"direct\": ..., \"opengpu\": ..., \"global\": ...},\n#               \"model_restrictions\": [...]}, ...],\n#    \"current_tier\": \"guest\"}\n```\n\nSend your API key with that call and `current_tier` is your own tier. Rate\nlimits are per customer: all your API keys share one pool. See\n[Rate Limits](../reference/rate-limits.md)."
+  },
+  {
+   "page": "introduction/authentication.md",
+   "title": "Auth & Access",
+   "heading": "Enterprise & partner tiers",
+   "anchor": "enterprise-partner-tiers",
+   "text": "Building on Relay, or need more than the standard tiers? Enterprise and partner plans offer:\n\n- Higher rate limits and key counts tuned to your workload\n- Programmatic key management: provision, top up and revoke keys for your own end users, each with its own spend limit ([how it works](../reference/enterprise.md))\n- Custom pricing\n- [Instances](../endpoints/instances.md): rentable GPU, NPU and CPU machines on the same wallet\n\n[Contact us](mailto:info@opengpu.network) to set one up."
+  },
+  {
+   "page": "introduction/authentication.md",
+   "title": "Auth & Access",
+   "heading": "Credits",
+   "anchor": "credits",
+   "text": "Requests are billed by usage, at each model's [pricing](../endpoints/models.md).\nCheck your balance in the [dashboard](https://dashboard.relaygpu.com), or with\n`GET /v2/customer/credits` (or the fuller `GET /v2/customer/profile`) using your\nJWT. Track spend over time per key and model with\n[Usage & Metrics](../reference/usage-metrics.md). You can also opt into a\nlow-credit warning header; see [Low-credit warnings](../reference/keys.md#low-credit-warnings)."
+  },
+  {
+   "page": "introduction/quickstart.md",
+   "title": "Quickstart",
+   "heading": "Quickstart",
+   "anchor": "quickstart",
+   "text": "Make your first request in a few minutes.\n\n**Domains:** the **API** is `https://relaygpu.com` (every curl and SDK call); the **dashboard** is `https://dashboard.relaygpu.com` (sign-up, balance, keys). Every endpoint and parameter is in the [API Explorer](../reference/api-explorer/README.md)."
+  },
+  {
+   "page": "introduction/quickstart.md",
+   "title": "Quickstart",
+   "heading": "1. Get an API key",
+   "anchor": "1-get-an-api-key",
+   "text": "1. Create an account at [dashboard.relaygpu.com](https://dashboard.relaygpu.com).\n2. Go to **Dashboard → Keys**.\n3. Click **Create Key**.\n\nCopy the key (`relay_sk_...`) now: it is shown only once.\n\nNo key yet? Omit the auth header and you call as a **guest**: a strict\nper-minute rate limit, and some models are key-only (a guest request for one\nreturns `403`)."
+  },
+  {
+   "page": "introduction/quickstart.md",
+   "title": "Quickstart",
+   "heading": "2. Make a request",
+   "anchor": "2-make-a-request",
+   "text": "**Chat:**\n```bash\ncurl -X POST https://relaygpu.com/v2/openai/v1/chat/completions \\\n  -H \"X-API-Key: YOUR_API_KEY\" \\\n  -H \"Content-Type: application/json\" \\\n  -d '{\n    \"model\": \"openai/gpt-5.4\",\n    \"messages\": [{\"role\": \"user\", \"content\": \"Hello!\"}]\n  }'\n```\n\nThe same call with the OpenAI Python SDK:\n\n```python\nfrom openai import OpenAI\n\nclient = OpenAI(base_url=\"https://relaygpu.com/v2/openai/v1\", api_key=\"YOUR_API_KEY\")\nresp = client.chat.completions.create(model=\"openai/gpt-5.4\", messages=[{\"role\": \"user\", \"content\": \"Hello!\"}])\nprint(resp.choices[0].message.content)\n```\n\n**Image generation:** returns the image inline, base64-encoded, in `images`.\n```bash\ncurl -X POST https://relaygpu.com/v2/image/flux/generate \\\n  -H \"X-API-Key: YOUR_API_KEY\" \\\n  -H \"Content-Type: application/json\" \\\n  -d '{\"prompt\": \"A red fox in autumn forest\"}'\n```\n\n**Video generation:** takes 2–20 minutes, so video is **asynchronous by\ndefault**: the call returns `202` with a `task_id` to poll.\n```bash\ncurl -X POST https://relaygpu.com/v2/video/wan-25/t2v \\\n  -H \"X-API-Key: YOUR_API_KEY\" \\\n  -H \"Content-Type: application/json\" \\\n  -d '{\"prompt\": \"A cat walking on a beach\", \"duration\": 5}'\n# Returns: {\"task_id\": \"direct:abc12345-...\", \"status\": \"queued\", \"poll_url\": \"/v2/tasks/direct:abc12345-...\", ...}\n\n# Poll for the result (no auth header: the task_id is the access token):\ncurl https://relaygpu.com/v2/tasks/direct:abc12345-...\n```\n\nWhen `status` is `completed`, `result.videos` holds the video URLs. The result\nand its links expire 1 hour after the task finishes, so fetch them promptly."
+  },
+  {
+   "page": "introduction/quickstart.md",
+   "title": "Quickstart",
+   "heading": "Next",
+   "anchor": "next",
+   "text": "- [Auth & Access](authentication.md): API keys, Bearer tokens, dashboard login and tiers\n- [Models & Pricing](../endpoints/models.md): which models you can call and what they cost\n- [Tasks & Webhooks](../reference/async-webhooks.md): poll, or get a signed push when a task finishes\n- [Errors](../reference/errors.md): the error envelope and codes to branch on\n- [API Explorer](https://docs.relaygpu.com/reference/api-explorer): the full endpoint reference"
+  },
+  {
+   "page": "reference/async-webhooks.md",
+   "title": "Tasks & Webhooks",
+   "heading": "Tasks & Webhooks",
+   "anchor": "tasks-webhooks",
+   "text": "Long-running work (video, complex image jobs) runs asynchronously: submit,\nget a `task_id` back immediately, then either **poll** for the result or have\nus **push** it to your server via a signed webhook.\n\nAny endpoint that supports it takes `\"async\": true` in the request body.\nVideo endpoints are async **by default** (send `\"async\": false` to wait\ninline instead). Polling needs no auth header; webhooks need an API key."
+  },
+  {
+   "page": "reference/async-webhooks.md",
+   "title": "Tasks & Webhooks",
+   "heading": "Task lifecycle",
+   "anchor": "task-lifecycle",
+   "text": "```\nqueued → running → completed | failed\n```\n\nSubmitting returns `202`:\n\n```json\n{\"task_id\": \"direct:abc12345-...\", \"status\": \"queued\", \"poll_url\": \"/v2/tasks/direct:abc12345-...\"}\n```\n\n**Poll** with `GET /v2/tasks/{task_id}`: no auth header needed; the task_id\nitself is the (unguessable) access token. Use it (including the `direct:`\nprefix and colon) literally in the path, with no URL-encoding:\n\n```json\n{\n  \"task_id\": \"direct:abc12345-...\",\n  \"status\": \"completed\",\n  \"elapsed_seconds\": 10,\n  \"task_address\": null,\n  \"mode\": \"direct\",\n  \"model\": \"black-forest-labs/FLUX-2-pro\",\n  \"created_at\": \"2026-07-05T14:49:06+00:00\",\n  \"error\": null,\n  \"result\": {\n    \"images\": [\"<base64-encoded PNG>\"],\n    \"model\": \"black-forest-labs/FLUX-2-pro\",\n    \"width\": 512,\n    \"height\": 512,\n    \"success\": true\n  }\n}\n```\n\nThe `result` shape is model-family-specific. Image models return the media\ninline as **base64** in `result.images`; video models return Relay-hosted URLs\nin `result.videos` (e.g. `{\"videos\": [\"https://cdn.relaygpu.com/content/0jTz5Ht994t1szRMSgF1JQ\"], \"model\": \"Wan-AI/Wan2.5-T2V\", \"size\": \"832x480\", \"duration\": 5}`).\nThe webhook payload and the poll response carry the same links.\n\n`elapsed_seconds` ticks while running and **freezes at the terminal state**.\nA failed task carries `error` (a string) with `result` set to `null`, plus a\nmachine-readable `error_code` and `error_detail`; see\n[Errors → Async tasks](errors.md#async-tasks).\n\n**Long-poll instead of looping**: add `?wait=N` (a whole number of seconds,\n1 to 30) and the request is held until the task is `completed` or `failed`, or\nuntil N seconds pass, whichever comes first. The reply is the same body as an\nordinary poll, in whatever state the task is in by then, with `elapsed_seconds`\nas of the reply. A task that is already finished, and an unknown or expired\n`task_id` (`404`), answer at once. Any other value of `wait` returns `422`\n(`VALIDATION_ERROR`). Under heavy load a waiting poll may answer at once\ninstead, exactly as if `wait` were absent, so keep looping until the status is\nterminal. Long-polling up to 30 seconds is safe behind Cloudflare: its own\nlimit is far above this.\n\n```bash\ncurl \"https://relaygpu.com/v2/tasks/direct:abc12345-...?wait=30\"\n```\n\n**By default your output link and the task record both live 1 hour after the\ntask reaches its terminal state.** After that, `GET /v2/tasks/{task_id}` returns\n404 and so does the media link, though the work was still billed.\n\nAdd `store_output: relay1d`, `relay7d` or `relay30d` to a media request and\n**both** live for the full 1, 7 or 30 days — the task stays pollable and the\noutput stays served from Relay's CDN — for a flat per-file fee. The record TTL\nand the link TTL are the same number set on the same write, so they cannot drift\napart. Rates and the options offered to you are in `media_storage` at\n`GET /v2/pricing`; an option missing from that block returns `422`, and the\nguest tier cannot use `store_output` at all. Storage also depends on the model:\none that returns its media inline has no link to host, so check\n`store_output_supported` in `GET /v2/models` — a `relay*` request against a\nmodel that says `false` returns `422` naming it."
+  },
+  {
+   "page": "reference/async-webhooks.md",
+   "title": "Tasks & Webhooks",
+   "heading": "Safe retries (`Idempotency-Key`)",
+   "anchor": "safe-retries-idempotency-key",
+   "text": "A submit that loses its connection leaves you not knowing whether the task was\naccepted. Send an `Idempotency-Key` header (any string, 1–255 characters — a\nUUID per logical request is the usual choice) and a retry is safe:\n\n```bash\ncurl -X POST https://relaygpu.com/v2/video/kling-3/t2v \\\n  -H \"X-API-Key: relay_sk_...\" -H \"Content-Type: application/json\" \\\n  -H \"Idempotency-Key: 6f1c2a9e-5b7d-4c3e-9a8f-2d1e0b4c7a91\" \\\n  -d '{\"prompt\":\"a lighthouse at dusk\"}'\n```\n\n- The **first** request with a key is processed as usual and returns its `202`.\n- A **retry** with the same key and the same body, within **24 hours** of the\n  first use, returns the original `202` again — same `task_id`, same\n  `poll_url` — with the response header `Idempotency-Replayed: true`. No new\n  task is created and nothing is charged again.\n- The same key with a **different body** returns `422 IDEMPOTENCY_KEY_REUSED`.\n  Use a new key for a new request.\n- A retry that arrives while the first request is still being accepted returns\n  `409 IDEMPOTENCY_IN_PROGRESS` with `Retry-After: 1`; retry after a second.\n- Keys are scoped to your account: another account using the same key does not\n  collide with yours. Guest (keyless) requests ignore the header.\n- The key outlives the task record: a replay late in the 24 hours still\n  returns the original `task_id`, but its poll may already be `404` once the\n  result has expired (see retention above).\n\nThe key is honoured on every request that answers `202` (async submits, and\n`POST /v2/workflows/{workflow_id}/run`, where a replay returns the same\n`run_id`). Synchronous and streaming calls accept the header but do not replay:\nthey run as usual. `POST /v2/files` keeps its own `Idempotency-Key` behaviour\n(a replay returns the same `file_id`)."
+  },
+  {
+   "page": "reference/async-webhooks.md",
+   "title": "Tasks & Webhooks",
+   "heading": "Webhooks",
+   "anchor": "webhooks",
+   "text": "Add `\"webhook_url\": \"https://your-server.example/hook\"` to an async request\nand we POST the terminal payload to it. The body is the task-status payload\nplus an `event` field (`task.completed` or `task.failed`).\n\nA `webhook_url` needs an API key (guests get `422`), `\"async\": true`\n(video has it by default) and direct mode; anything else is refused with `422`\nat submit time.\n\n```bash\ncurl -X POST https://relaygpu.com/v2/video/wan-25/t2v \\\n  -H \"X-API-Key: YOUR_KEY\" \\\n  -H \"Content-Type: application/json\" \\\n  -d '{\"prompt\": \"A robot waving\", \"async\": true,\n       \"webhook_url\": \"https://your-server.example/hook\"}'\n```\n\nThe webhook body carries **field-set parity** with the poll response, not byte\nparity: it omits the unused key. A completed task carries `result` and no\n`error`; a failed task carries `error` and no `result`. The poll `GET` instead\nreturns **both** keys with one set to `null`. `task_address` is always `null`\nfor webhooks; they fire only for direct-mode tasks.\n\n`error` is a human-readable string, not an object; don't code against\n`error.message` or `error.code`. Branch on the sibling `error_code` instead.\n\nThe body does **not** carry `poll_url`. If you need the full result (for\nexample after `\"result_omitted\": true`), poll `GET /v2/tasks/{task_id}` using\nthe `task_id` from the body.\n\nNo second request is needed for total payloads up to 1 MiB (the full envelope,\nresult included); larger results arrive with `\"result_omitted\": true` and the\n`result` key omitted. Fetch those from the poll URL right away (see expiry\nabove).\n\n**`task.completed`**: has `result`, no `error` key:\n\n```json\n{\n  \"event\": \"task.completed\",\n  \"task_id\": \"direct:3023013b-...\",\n  \"status\": \"completed\",\n  \"elapsed_seconds\": 6,\n  \"task_address\": null,\n  \"mode\": \"direct\",\n  \"model\": \"Qwen/qwen-image\",\n  \"created_at\": \"2026-07-06T10:23:02.962460+00:00\",\n  \"result\": { \"urls\": [\"https://...\"], \"model\": \"Qwen/qwen-image\", \"size\": \"1024x1024\", \"success\": true }\n}\n```\n\n**`task.failed`**: `error` is a plain string, with `error_code` and `error_detail` beside it, and no `result` key:\n\n```json\n{\n  \"event\": \"task.failed\",\n  \"task_id\": \"direct:...\",\n  \"status\": \"failed\",\n  \"elapsed_seconds\": 1205,\n  \"task_address\": null,\n  \"mode\": \"direct\",\n  \"model\": \"Wan-AI/Wan2.5-T2V\",\n  \"created_at\": \"2026-07-06T10:20:00+00:00\",\n  \"error\": \"Video generation timed out.\",\n  \"error_code\": \"UPSTREAM_TIMEOUT\",\n  \"error_detail\": null\n}\n```\n\n**`result_omitted` thin envelope**: result > 1 MiB, so no `result` and no `error` key:\n\n```json\n{\n  \"event\": \"task.completed\",\n  \"task_id\": \"direct:...\",\n  \"status\": \"completed\",\n  \"elapsed_seconds\": 42,\n  \"task_address\": null,\n  \"mode\": \"direct\",\n  \"model\": \"Wan-AI/Wan2.5-T2V\",\n  \"created_at\": \"2026-07-06T10:20:00+00:00\",\n  \"result_omitted\": true\n}\n```"
+  },
+  {
+   "page": "reference/async-webhooks.md",
+   "title": "Tasks & Webhooks",
+   "heading": "Workflow run webhooks",
+   "anchor": "workflow-run-webhooks",
+   "text": "A [workflow](../endpoints/workflows.md) run takes the same `webhook_url`, on\nthe run body, and is called **once**, when the run ends:\n\n| Event | When | `result.status` |\n|---|---|---|\n| `workflow.completed` | the last step finished | `completed` |\n| `workflow.failed` | a step failed, the run ran out of time, or you cancelled it | `failed` or `cancelled` |\n\n```bash\ncurl -X POST https://relaygpu.com/v2/workflows/script-voiceover/run \\\n  -H \"X-API-Key: YOUR_KEY\" \\\n  -H \"Content-Type: application/json\" \\\n  -d '{\"inputs\": {\"messages\": [{\"role\": \"user\", \"content\": \"One upbeat line about the sea.\"}],\n                  \"voice\": \"Serena\"},\n       \"webhook_url\": \"https://your-server.example/hook\"}'\n```\n\nThe envelope is the task one: `task_id` is the **run id**, `status` is always\n`completed` (the delivery finished, not necessarily the run), `mode` is\n`workflows`, `model` is the workflow id, and `result` is the run **exactly as\n`GET /v2/workflows/runs/{run_id}` returns it**. Branch on `event` or on\n`result.status`, never on the top-level `status`:\n\n```json\n{\n  \"event\": \"workflow.failed\",\n  \"task_id\": \"wf:7c9e6679-7425-40de-944b-e07fc1f90ae7\",\n  \"status\": \"completed\",\n  \"elapsed_seconds\": 14,\n  \"task_address\": null,\n  \"mode\": \"workflows\",\n  \"model\": \"script-voiceover\",\n  \"created_at\": \"2026-10-06T23:59:17+00:00\",\n  \"result\": {\n    \"run_id\": \"wf:7c9e6679-7425-40de-944b-e07fc1f90ae7\",\n    \"workflow_id\": \"script-voiceover\",\n    \"version\": 1,\n    \"status\": \"cancelled\",\n    \"steps\": [\n      {\"step_index\": 0, \"step_id\": \"write\", \"model\": \"anthropic/claude-haiku-4-5-20251001\",\n       \"status\": \"completed\", \"task_id\": \"direct:...\", \"output\": {\"...\": \"...\"},\n       \"error\": null, \"cost_usd\": 0.0004},\n      {\"step_index\": 1, \"step_id\": \"speak\", \"model\": \"Qwen/qwen3-tts-flash\",\n       \"status\": \"skipped\", \"task_id\": \"direct:...\", \"output\": null,\n       \"error\": null, \"cost_usd\": null}\n    ],\n    \"inputs\": {\"messages\": [{\"role\": \"user\", \"content\": \"One upbeat line about the sea.\"}], \"voice\": \"Serena\"},\n    \"store_output\": \"provider\",\n    \"output\": null,\n    \"error\": \"Cancelled by request.\",\n    \"failed_step_index\": null,\n    \"total_cost_usd\": 0.0004,\n    \"created_at\": \"2026-10-06T23:59:17+00:00\",\n    \"completed_at\": \"2026-10-06T23:59:31+00:00\"\n  }\n}\n```\n\n- Signed, retried and logged exactly like task webhooks (below), with the\n  same `webhook_url` rules; `422` at submit time if the URL is refused.\n- One delivery per run. The run's steps never send `task.*` events of their\n  own; each step's `task_id` stays pollable as usual.\n- `cost_usd` per step comes from billing, which settles a second or two after\n  a step finishes, so the last step can read `null` in the webhook. Poll the\n  run for the settled figures.\n- Past the 1 MiB inline cap the body carries `\"result_omitted\": true` instead\n  of `result`; read the run from `GET /v2/workflows/runs/{run_id}`."
+  },
+  {
+   "page": "reference/async-webhooks.md",
+   "title": "Tasks & Webhooks",
+   "heading": "Verifying deliveries",
+   "anchor": "verifying-deliveries",
+   "text": "Every delivery is signed per the [Standard Webhooks](https://www.standardwebhooks.com/)\nspec: headers `webhook-id`, `webhook-timestamp`, `webhook-signature`. Your\nsigning secret is auto-provisioned; fetch it anytime. Auth: JWT, or\n(enterprise/partner) superkey; regular inference keys can't read it:\n\n```bash\ncurl https://relaygpu.com/v2/customer/webhook-secret \\\n  -H \"Authorization: Bearer YOUR_JWT\"\n# → {\"secret\": \"whsec_...\", \"created_at\": \"...\", \"previous_valid_until\": null}\n```\n\nThe signing secret is **account-level**: every API key on your account,\nincluding partner sub-keys, shares it; there is no per-key secret.\n\nOff-the-shelf `standardwebhooks` libraries verify with the full `whsec_...`\nstring:\n\n```python\nfrom standardwebhooks import Webhook\n\nwh = Webhook(\"whsec_...\")\npayload = wh.verify(request_body_bytes, request_headers)  # raises if invalid\n```\n\nRolling your own? The HMAC-SHA256 key is the **base64-decoded part after\n`whsec_`**; sign the exact string `{webhook-id}.{webhook-timestamp}.{raw body}`\nand compare (constant-time) against each space-delimited `v1,<base64>` token.\n`webhook-timestamp` is an integer Unix epoch in **seconds** (UTC); reject\ntimestamps outside your tolerance (we recommend 5 minutes).\n\nRotate with `POST /v2/customer/webhook-secret/rotate`; the old secret keeps\nverifying for 24h (deliveries carry both signatures during the grace window).\nOnly the two most recent secrets are ever valid: rotating again within the\ngrace window immediately drops the oldest one, so rotating twice in quick\nsuccession retires the first secret before its 24h elapses. Roll one secret at\na time and let the grace window pass before rotating again."
+  },
+  {
+   "page": "reference/async-webhooks.md",
+   "title": "Tasks & Webhooks",
+   "heading": "Delivery guarantees",
+   "anchor": "delivery-guarantees",
+   "text": "- **At-least-once.** `webhook-id` is stable across retries; dedupe on it.\n- A `2xx` within 15 seconds acks. Anything else (3xx included; redirects are\n  not followed) retries: up to 8 attempts, backoff 30s doubling to a 30-minute\n  cap (~1h window). After that the event is dropped. Fall back to the poll\n  URL, but it also expires ~1h after completion (see **Reconciliation** below),\n  so don't treat it as permanent.\n- `webhook_url` must be `https://`, publicly resolvable, and without embedded\n  credentials, checked at submit time (422 if not)."
+  },
+  {
+   "page": "reference/async-webhooks.md",
+   "title": "Tasks & Webhooks",
+   "heading": "Delivery log",
+   "anchor": "delivery-log",
+   "text": "Every attempt we make is recorded and queryable; when a webhook \"didn't\narrive\", look here before your receiver's logs:\n\n```bash\n# Recent deliveries, newest first\ncurl \"https://relaygpu.com/v2/customer/webhook-deliveries?limit=20\" \\\n  -H \"Authorization: Bearer YOUR_JWT\"\n\n# Everything that exhausted its retries\ncurl \"https://relaygpu.com/v2/customer/webhook-deliveries?outcome=gave_up\" \\\n  -H \"Authorization: Bearer YOUR_JWT\"\n\n# Full attempt-by-attempt timeline for one task (or one workflow run: wf:...)\ncurl \"https://relaygpu.com/v2/customer/webhook-deliveries/direct:abc12345-...\" \\\n  -H \"Authorization: Bearer YOUR_JWT\"\n```\n\n- **Filters**: `outcome` (`delivered` / `failed` / `gave_up` / `blocked`),\n  `event` (`task.completed` / `task.failed` / `workflow.completed` /\n  `workflow.failed`), `task_id` (**exact** match; paste the full id, prefixes\n  return nothing). A workflow run's delivery is listed under its run id\n  (`wf:...`) in `task_id`, and the timeline route takes a run id the same way.\n- **Pagination**: cursor-based, with `limit` (default 20, max 100); pass the\n  response's `next_page` back as `page` while `has_more` is true.\n- The per-task timeline lists each attempt with its outcome and, where\n  recorded, the receiver's HTTP status or the transport error. `404` means no\n  deliveries were recorded for that `task_id` (e.g. the request had no\n  `webhook_url`).\n- Auth: JWT, or (enterprise/partner) superkey."
+  },
+  {
+   "page": "reference/async-webhooks.md",
+   "title": "Tasks & Webhooks",
+   "heading": "Writing your handler",
+   "anchor": "writing-your-handler",
+   "text": "Verify the signature, dedupe on `webhook-id` (delivery is at-least-once),\nenqueue the event, and return any `2xx` within the 15-second ack budget. Never\ndo heavy processing inline: fetching a large result or any slow work inside\nthe handler can blow the 15s budget and trigger duplicate retries."
+  },
+  {
+   "page": "reference/async-webhooks.md",
+   "title": "Tasks & Webhooks",
+   "heading": "Reconciliation",
+   "anchor": "reconciliation",
+   "text": "The retry window (~61.5 min: the first attempt at completion, then retries\n30s, 60s, 120s, 240s, 480s, 960s and 1800s apart) and the 60-minute result TTL\nboth run from task completion, so the poll\nURL actually 404s ~90s **before** the final webhook attempt. If your receiver\nis unreachable for the whole window you lose **both** the webhook and the\npollable result while the work is still billed.\n\nProtect yourself: persist submitted `task_id`s, sweep for any task with no\nterminal webhook after a few minutes, and poll before the 1-hour expiry. A\n10-minute outage is fine; a 2-hour outage means data loss unless the sweeper\ncaught it first. After the fact, the [delivery log](#delivery-log)\n(`?outcome=gave_up`) tells you exactly which tasks you lost.\n\nFull contract (payload schema, headers): [API Explorer → Webhooks](https://docs.relaygpu.com/reference/api-explorer)."
+  },
+  {
+   "page": "reference/enterprise.md",
+   "title": "Enterprise & Partners",
+   "heading": "Enterprise & Partners",
+   "anchor": "enterprise-partners",
+   "text": "Enterprise and partner plans add higher rate limits and key counts, custom\npricing, and the tools to build on Relay: issue API keys to your own users, cap\neach key's spend, restrict the models they can call, and pull per-key usage to\nbill them. [Talk to us](mailto:info@opengpu.network) to set one up.\n\nThe standard keys, usage, and metrics endpoints behave the same on these\nplans; see [API Keys & Account](keys.md) and [Usage & Metrics](usage-metrics.md).\nThis page covers what they add on top."
+  },
+  {
+   "page": "reference/enterprise.md",
+   "title": "Enterprise & Partners",
+   "heading": "Superkey",
+   "anchor": "superkey",
+   "text": "On a partner tier, your account's first key is your **superkey**, the\nmanagement credential for your backend. Use it to mint, top up, and revoke keys and to read your account\n(`X-API-Key` on the `/v2/customer/*` routes); it's flagged `is_superkey` in your\nkey list. Every other key you issue is inference-only, so a leaked one can't\ntouch your account or the other keys.\n\n**Rotating the superkey** (routine hygiene, or it leaked): revoke it, then\ncrown a replacement with `POST /v2/customer/keys/{key_id}/promote` on any\nactive key. Promote is **JWT-only** by design (a stolen superkey can't crown\nits own successor) and returns `409` while an active superkey still exists,\nso revoke first. Between the two calls your backend cannot manage keys with a\nsuperkey (your dashboard login still can, and your issued keys keep serving\ninference); have the replacement key ready before you revoke."
+  },
+  {
+   "page": "reference/enterprise.md",
+   "title": "Enterprise & Partners",
+   "heading": "Per-key budgets",
+   "anchor": "per-key-budgets",
+   "text": "Give any key a spending cap with `key_budget`. When it runs out, that key's\nrequests return `402 KEY_BUDGET_EXHAUSTED` until you top it up, so a single user\ncan never drain your balance. Omit it to leave a key uncapped.\n\n```bash\n# Superkey issues a key with a $5 cap\ncurl -X POST https://relaygpu.com/v2/customer/keys \\\n  -H \"X-API-Key: YOUR_SUPERKEY\" \\\n  -H \"Content-Type: application/json\" \\\n  -d '{\"name\": \"end_user_42\", \"key_budget\": 5.00}'\n\n# Top it up later\ncurl -X POST https://relaygpu.com/v2/customer/keys/{key_id}/topup \\\n  -H \"X-API-Key: YOUR_SUPERKEY\" \\\n  -H \"Content-Type: application/json\" \\\n  -d '{\"amount\": 2.00}'\n```\n\nTo change a cap, `PATCH /v2/customer/keys/{key_id}` with `key_budget`, which is\ntri-state: a number **sets** the cap absolutely, an explicit `null` **removes**\nit (uncapped), and omitting the field leaves it unchanged. Use `/topup` for\nincrements (it's concurrency-safe; PATCH just overwrites)."
+  },
+  {
+   "page": "reference/enterprise.md",
+   "title": "Enterprise & Partners",
+   "heading": "Model access",
+   "anchor": "model-access",
+   "text": "Restrict every issued key to an approved list of models; your superkey keeps\nfull access.\n\n```bash\ncurl -X PATCH https://relaygpu.com/v2/customer/model-allowlist \\\n  -H \"X-API-Key: YOUR_SUPERKEY\" \\\n  -H \"Content-Type: application/json\" \\\n  -d '{\"model_allowlist\": [\"direct.openai.openai/gpt-5.2\"]}'\n```\n\nSend `{\"model_allowlist\": null}` to remove the restriction.\n\nRead the current allowlist with `GET /v2/customer/model-allowlist` (returns\n`{ \"model_allowlist\": [...] | null }`):\n\n```bash\ncurl https://relaygpu.com/v2/customer/model-allowlist \\\n  -H \"X-API-Key: YOUR_SUPERKEY\"\n```\n\nIt's also included as `sub_key_model_allowlist` on `GET /v2/customer/profile`\nif you're loading the whole account at once."
+  },
+  {
+   "page": "reference/enterprise.md",
+   "title": "Enterprise & Partners",
+   "heading": "Per-key cost",
+   "anchor": "per-key-cost",
+   "text": "`GET /v2/customer/usage/timeseries` breaks down cost and tokens by model and by\nkey over any date range: the report you need to bill your users. It takes the\nsame query parameters as [metrics](usage-metrics.md#metrics) but returns\nspend instead of latency; group by key for a per-user total.\n\nThis endpoint is **partner-tier only**: it requires a custom (partner) tier.\nCalls from standard tiers return `403` — use `GET /v2/customer/usage` (per-key\nlifetime/daily totals) instead. The latency [metrics](usage-metrics.md#metrics)\nendpoint, by contrast, is available on **every** tier.\n\n```bash\ncurl \"https://relaygpu.com/v2/customer/usage/timeseries?start_time=1783000800&bucket_width=1d&group_by=model&group_by=key_id\" \\\n  -H \"X-API-Key: YOUR_SUPERKEY\"\n```"
+  },
+  {
+   "page": "reference/enterprise.md",
+   "title": "Enterprise & Partners",
+   "heading": "Low-credit warnings",
+   "anchor": "low-credit-warnings",
+   "text": "The account [low-credit warning](keys.md#low-credit-warnings) covers\nevery key. With it on, the keys you issue also receive the `X-Credit-Warning`\nheader, so your users can see the account is low. To keep your balance private,\nleave it off and check `GET /v2/customer/credits` from your backend instead."
+  },
+  {
+   "page": "reference/enterprise.md",
+   "title": "Enterprise & Partners",
+   "heading": "Pricing",
+   "anchor": "pricing",
+   "text": "Enterprise and partner accounts can have custom per-model rates.\n`GET /v2/customer/pricing` (JWT or superkey) returns your effective pricing;\nthe public `GET /v2/pricing` never shows it. Standard tiers get `403` there and\npay the public rates.\n\n---\n\nFull endpoint reference:\n[API Explorer](https://docs.relaygpu.com/reference/api-explorer)."
+  },
+  {
+   "page": "reference/errors.md",
+   "title": "Errors",
+   "heading": "Errors",
+   "anchor": "errors",
+   "text": "Every error response carries **two** things: the `detail` field Relay has always\nreturned, and an additive `error` object with a machine-readable code.\n\n```json\n{\n  \"detail\": \"KEY_BUDGET_EXHAUSTED: this API key's budget is depleted. Topup via POST /v2/customer/keys/{key}/topup.\",\n  \"error\": {\n    \"code\": \"KEY_BUDGET_EXHAUSTED\",\n    \"type\": \"authorization\",\n    \"source\": \"client\",\n    \"message\": \"KEY_BUDGET_EXHAUSTED: this API key's budget is depleted. Topup via POST /v2/customer/keys/{key}/topup.\",\n    \"request_id\": \"3f0c9c8e-6a1d-4b77-9a2e-2b4f1e77c001\"\n  }\n}\n```\n\n| Field | Meaning |\n|---|---|\n| `code` | Stable token to branch on. **May be `null`** — see below. |\n| `type` | Broad class: `validation`, `authentication`, `authorization`, `rate_limit`, `timeout`, `schema`, `internal`, `unavailable`, `removed`. `null` when `code` is. |\n| `source` | Best-effort blame: `client`, `provider`, `relay`. Advisory — see the caveat below. `null` when `code` is. |\n| `message` | The same text as `detail` (or, when `detail` is structured, a one-line summary of it). |\n| `request_id` | Matches the `X-Request-ID` response header. Quote it in support requests. |\n\n`detail` is **unchanged** and will stay that way. If you parse it today, keep\nparsing it — nothing about its wording, type, or position has moved. The `error`\nobject is purely additive. Request-validation errors (`422`\n`VALIDATION_ERROR`) still return a list in FastAPI's standard shape, and the\nfull list is preserved under `error.detail`. Each entry names the field\n(`loc`) and the problem (`msg`); it never echoes the value you sent, in any\nenvironment:\n\n```json\n{\"detail\": [{\"type\": \"missing\", \"loc\": [\"body\", \"prompt\"], \"msg\": \"Field required\"}]}\n```"
+  },
+  {
+   "page": "reference/errors.md",
+   "title": "Errors",
+   "heading": "What to rely on",
+   "anchor": "what-to-rely-on",
+   "text": "**`error.code` is append-only.** Once a code appears in the table below it will\nnever be renamed or removed, so matching on one is safe indefinitely. New codes\n*will* be added as more of the API is classified — treat a code you do not\nrecognise as its HTTP status and move on.\n\n**`error.code` can be `null`, and null does not mean \"no error\".** It means that\nparticular failure has not been classified yet. The HTTP status is always\nauthoritative; the code is the finer-grained discriminator where we have one.\nBranch on the status first, then refine on the code.\n\n**`source` is a best-effort classification, not an audit.** It is inherited from\nhow the upstream provider reported the failure. Providers that answer a\nbad-parameter error with an HTTP 5xx are reported as `source: \"provider\"` even\nthough the request was at fault — we deliberately do not second-guess the\nupstream signal. Do not gate billing, alerting, or retry decisions on `source`\nalone; use `code` and the status."
+  },
+  {
+   "page": "reference/errors.md",
+   "title": "Errors",
+   "heading": "Error codes",
+   "anchor": "error-codes",
+   "text": "| Code | HTTP | Type | Source |\n|---|---|---|---|\n| `SYSTEM_KEY_IMMUTABLE` | 400 | validation | client |\n| `UPSTREAM_INVALID_REQUEST` | 400 | validation | client |\n| `INVALID_API_KEY` | 401 | authentication | client |\n| `INVALID_TOKEN` | 401 | authentication | client |\n| `KEY_REVOKED` | 401 | authentication | client |\n| `MISSING_CREDENTIALS` | 401 | authentication | client |\n| `INSUFFICIENT_CREDITS` | 402 | authorization | client |\n| `KEY_BUDGET_EXHAUSTED` | 402 | authorization | client |\n| `ACCOUNT_INACTIVE` | 403 | authorization | client |\n| `BANK_TRANSFER_NOT_AVAILABLE` | 403 | authorization | client |\n| `CREDENTIAL_NOT_PERMITTED` | 403 | authorization | client |\n| `KEY_LIMIT_REACHED` | 403 | authorization | client |\n| `KEY_NOT_OWNED` | 403 | authorization | client |\n| `MODEL_NOT_AVAILABLE` | 403 | validation | client |\n| `MODEL_RETIRED` | 403 | removed | client |\n| `SCOPE_DENIED` | 403 | authorization | client |\n| `TIER_FEATURE_UNAVAILABLE` | 403 | authorization | client |\n| `CUSTOMER_NOT_FOUND` | 404 | validation | client |\n| `FILE_NOT_FOUND` | 404 | validation | client |\n| `INSTANCE_NOT_FOUND` | 404 | validation | client |\n| `INVOICE_NOT_FOUND` | 404 | validation | client |\n| `KEY_NOT_FOUND` | 404 | validation | client |\n| `MANDATE_NOT_FOUND` | 404 | validation | client |\n| `MODEL_NOT_FOUND` | 404 | validation | client |\n| `PROMO_CODE_INVALID` | 404 | validation | client |\n| `REFUND_NOT_FOUND` | 404 | validation | client |\n| `TASK_NOT_FOUND` | 404 | validation | client |\n| `TOPUP_NOT_FOUND` | 404 | validation | client |\n| `WEBHOOK_DELIVERY_NOT_FOUND` | 404 | validation | client |\n| `WORKFLOW_NOT_FOUND` | 404 | validation | client |\n| `WORKFLOW_RUN_NOT_FOUND` | 404 | validation | client |\n| `AMOUNT_MISMATCH` | 409 | validation | client |\n| `AUTO_TOPUP_NOT_CONFIGURED` | 409 | validation | client |\n| `BILLING_PROFILE_REQUIRED` | 409 | validation | client |\n| `DOCUMENT_NOT_AVAILABLE` | 409 | validation | client |\n| `IDEMPOTENCY_IN_PROGRESS` | 409 | validation | client |\n| `INSTANCE_NOT_READY` | 409 | validation | client |\n| `INVOICE_NOT_OPEN` | 409 | validation | client |\n| `PROMO_ALREADY_REDEEMED` | 409 | validation | client |\n| `RECEIVABLE_LIMIT_EXCEEDED` | 409 | validation | client |\n| `RECEIVABLE_OVERDUE` | 409 | validation | client |\n| `SUPERKEY_CONFLICT` | 409 | validation | client |\n| `WORKFLOW_RUN_NOT_CANCELLABLE` | 409 | validation | client |\n| `PROMO_CODE_EXHAUSTED` | 410 | validation | client |\n| `PROMO_CODE_EXPIRED` | 410 | validation | client |\n| `FILE_TOO_LARGE` | 413 | validation | client |\n| `FILE_TYPE_UNSUPPORTED` | 415 | validation | client |\n| `CONTENT_POLICY_DECLINED` | 422 | validation | client |\n| `IDEMPOTENCY_KEY_REUSED` | 422 | validation | client |\n| `IMAGE_TEXT_RESPONSE` | 422 | validation | client |\n| `VALIDATION_ERROR` | 422 | validation | client |\n| `FILE_QUOTA_EXCEEDED` | 429 | rate_limit | client |\n| `INSTANCE_LIMIT` | 429 | rate_limit | client |\n| `RATE_LIMITED` | 429 | rate_limit | client |\n| `WORKFLOW_RUN_LIMIT_REACHED` | 429 | rate_limit | client |\n| `INTERNAL_ERROR` | 500 | internal | relay |\n| `IMAGE_NO_OUTPUT` | 502 | unavailable | provider |\n| `PROVIDER_SCHEMA_MISMATCH` | 502 | schema | provider |\n| `PROVIDER_UNAVAILABLE` | 502 | unavailable | provider |\n| `UPSTREAM_ERROR` | 502 | unavailable | provider |\n| `CAPACITY_EXHAUSTED` | 503 | unavailable | provider |\n| `INSTANCES_UNAVAILABLE` | 503 | unavailable | provider |\n| `PAYMENT_SERVICE_UNAVAILABLE` | 503 | unavailable | relay |\n| `UPSTREAM_TIMEOUT` | 504 | timeout | provider |\n\nCodes marked `source: provider` describe a failure on the model-provider leg;\n`client` means the request needs changing; `relay` means it is ours."
+  },
+  {
+   "page": "reference/errors.md",
+   "title": "Errors",
+   "heading": "`error.detail` on content and image errors",
+   "anchor": "errordetail-on-content-and-image-errors",
+   "text": "`error.detail` always carries upstream's own verdict, **verbatim and\nuninterpreted**, beside our reading of it — so you can check the two against\neach other. Its shape depends on how upstream said it, and there are two:"
+  },
+  {
+   "page": "reference/errors.md",
+   "title": "Errors",
+   "heading": "Image lane — the model's own verdict fields",
+   "anchor": "image-lane-the-models-own-verdict-fields",
+   "text": "`CONTENT_POLICY_DECLINED`, `IMAGE_TEXT_RESPONSE` and `IMAGE_NO_OUTPUT` on the\nimage endpoints carry:\n\n| field | what it is |\n|---|---|\n| `finish_reason` | the model's own verdict (`STOP`, `SAFETY`, `OTHER`, …), exactly as it appears on a successful Gemini response |\n| `block_reason` | upstream's reason for blocking the *input*, when it named one |\n| `text` | the model's reply in words, when it wrote one instead of an image (capped at 400 characters) |\n\nAll three keys are always present and carry `null` where upstream reported\nnothing — which is most of them, since only the Gemini models forward any of it.\nOur `code` is our reading of these values; the fields are the values themselves,\nso you can always check the two against each other.\n\n**`finish_reason: STOP` does not mean the image was produced.** A model that\nwithholds an image on content grounds may report `STOP` and put its explanation\nin `text` rather than naming a safety verdict — so a `STOP` can legitimately\narrive under a 4xx. Where that happens the `code`, not the reason, is the thing\nto trust.\n\nDo not branch on any of the three. `code` is the stable contract; these are\nupstream vocabulary that can change without notice, and our mapping from them is\nan interpretation that may be revised."
+  },
+  {
+   "page": "reference/errors.md",
+   "title": "Errors",
+   "heading": "Video and chat lanes — the provider's filter code",
+   "anchor": "video-and-chat-lanes-the-providers-filter-code",
+   "text": "Where a provider's content filter refuses the request outright rather than the\nmodel declining it, `CONTENT_POLICY_DECLINED` carries the filter's own verdict\ninstead:\n\n| field | what it is |\n|---|---|\n| `upstream_code` | the provider's machine code for the refusal, verbatim (e.g. `InputImageSensitiveContentDetected.PrivacyInformation`, `DataInspectionFailed`), or `null` where the provider declined in words and named no code |\n| `filtered` | `\"input\"`, `\"output\"`, or `null` when the provider did not say which |\n\n`filtered` is the one field worth acting on, and it decides whether a retry is\nworth anything:\n\n- **`\"input\"`** — your prompt, reference image or reference video tripped the\n  filter. Change the input.\n- **`\"output\"`** — the input was accepted and the *generated* result was\n  withheld. Rephrasing and retrying can succeed.\n- **`null`** — the provider named a refusal but not a side. Treat it as either.\n\nRead `message` alongside it, because the two carry different certainties. Where\nthe provider stated its verdict, an `\"input\"` decline is deterministic and the\nmessage says so (\"Retrying unchanged will fail\"). Where the provider refused\nwithout naming a reason — some video models only report that nothing was\nproduced for the prompt — the message hedges (\"most likely\") and a retry may\nbe worth one attempt. We never assert a verdict the provider did not give.\n\nBoth shapes are the same `code` and the same 422. Tell them apart by which\nKEYS are present — `upstream_code`/`filtered` versus\n`finish_reason`/`block_reason`/`text` — not by which values are non-null: every\nkey in both shapes can carry `null`, because a provider that explains nothing\nis reported as explaining nothing rather than guessed at. Do not branch on the\nprovider's literal values."
+  },
+  {
+   "page": "reference/errors.md",
+   "title": "Errors",
+   "heading": "Using it from an SDK",
+   "anchor": "using-it-from-an-sdk",
+   "text": "The `error` object's field names (`code`, `type`, `message`) match the shape the\nofficial OpenAI SDK already parses, so on `/v2/openai/*` endpoints you get the\ncode without any extra work. With `openai>=2.35`:\n\n```python\nimport openai\n\nclient = openai.OpenAI(api_key=\"relay_sk_...\",\n                       base_url=\"https://relaygpu.com/v2/openai/v1\")\ntry:\n    client.chat.completions.create(model=\"openai/gpt-5.4\",\n                                   messages=[{\"role\": \"user\", \"content\": \"Hello\"}])\nexcept openai.APIStatusError as e:\n    print(e.status_code)   # 402\n    print(e.code)          # \"KEY_BUDGET_EXHAUSTED\"\n    print(e.body[\"source\"])  # \"client\"\n```\n\nThe `anthropic` SDK exposes the same values one level in, as\n`e.body[\"error\"][\"code\"]`.\n\n**Exception classes are unchanged.** Both SDKs pick the exception class from the\nHTTP status, and no status changed — an `AuthenticationError` is still an\n`AuthenticationError`. What *does* change: because `error.message` now exists,\nboth SDKs prefer it when rendering the exception, so the text in your logs and\ntracebacks is more specific than before. Nothing to migrate; expect nicer\nstrings."
+  },
+  {
+   "page": "reference/errors.md",
+   "title": "Errors",
+   "heading": "Rollout note",
+   "anchor": "rollout-note",
+   "text": "The `error` object appears on **every** error response at once — including\nroutes whose `code` is still `null`. Migration is incremental for the code\n*values*, never for the envelope. If you validate response bodies against a\nstrict schema that rejects unknown keys, add `error` to it before upgrading."
+  },
+  {
+   "page": "reference/errors.md",
+   "title": "Errors",
+   "heading": "Status codes",
+   "anchor": "status-codes",
+   "text": "| Code | Meaning | What to do |\n|------|---------|------------|\n| `400` | The upstream model rejected the request parameters (`UPSTREAM_INVALID_REQUEST`), or a well-formed request asks for something the route cannot do — `stream` with `async`, a direct-only route in `opengpu` mode, an unknown cursor (`VALIDATION_ERROR` at 400) | Fix the request; `detail` says what |\n| `401` | API key missing, invalid, or revoked | The message says which; use an active key or contact your key issuer |\n| `402` | Out of credits (wallet, or this key's budget) | Top up |\n| `403` | Valid key, access denied | The message names the blocking layer (tier, allowlist, or account state) |\n| `404` | Unknown route, or an unknown key / task / run / file | Check the endpoint tables per category. `FILE_NOT_FOUND`: the file id is not yours, or it expired more than 24 hours ago |\n| `409` | Conflicts with current state (e.g. a superkey already exists) | Resolve the conflict, then retry |\n| `410` | Gone for good (e.g. an expired or fully-redeemed promo code) | Do not retry |\n| `413` | The uploaded file is too large (`FILE_TOO_LARGE`) | [Files](../endpoints/files.md) take up to 100 MB per file — send a smaller file |\n| `415` | The uploaded file is not an image, video or audio file (`FILE_TYPE_UNSUPPORTED`) | Upload media only; for a URL upload, check what the URL actually serves |\n| `422` | The body failed schema validation (`VALIDATION_ERROR` at 422), the model declined it on content grounds, or it replied in words instead of an image | `VALIDATION_ERROR`: `detail` lists the offending fields (the same code answers 400 when the body is well-formed but the route cannot serve it — branch on the code, not the status). `CONTENT_POLICY_DECLINED`: the content was refused — change the content, not the parameters. Check `detail.filtered`: `\"input\"` means a retry of the same input will fail again, `\"output\"` means rephrasing can succeed. Where no side is named, borderline content is not always declined deterministically, so a retry may succeed. `IMAGE_TEXT_RESPONSE`: read `detail.text` — the model's own reply says whether it declined or answered a question. `VALIDATION_ERROR` with a `store_output` message: the option is not offered right now, or that MODEL returns media inline and has nothing to store (the message names it; `store_output_supported` in `GET /v2/models` says which models offer it) — send the request without it, or with the default `provider` |\n| `429` | Rate limit exceeded, or the daily free upload quota is used up | Back off; `Retry-After` header is set. `FILE_QUOTA_EXCEEDED`: free (`relay1h`) [Files](../endpoints/files.md) uploads are used up for today — `Retry-After` counts to 00:00 UTC; a paid retention is not limited by the quota |\n| `500` | Relay-side error | Retry; contact support with the `request_id` if it persists |\n| `502` | A provider failed the request, none could take it, or one answered with nothing usable | `UPSTREAM_ERROR`: a provider accepted this request and failed while serving it. Retry; if it persists, contact support with the `request_id`. `PROVIDER_UNAVAILABLE`: no provider could take this request right now — none is registered for the model, every one is paused after repeated failures, your tier cannot wait for a busy one, or the provider we reached refused the call outright (quota, balance, rate limit). Retry later. `IMAGE_NO_OUTPUT`: the call succeeded and the model produced no image — retry once, then change the prompt or reference image |\n| `503` | Model temporarily at capacity, or Instances is unavailable | `CAPACITY_EXHAUSTED`: every provider for the model is busy — retry after `Retry-After` seconds. `INSTANCES_UNAVAILABLE`: instance rental is not configured on this environment, or the instance catalog is temporarily unreadable — retry after `Retry-After` seconds; if it persists, contact support |\n| `504` | Upstream timeout | Retry; use `\"async\": true` for long tasks |"
+  },
+  {
+   "page": "reference/errors.md",
+   "title": "Errors",
+   "heading": "Examples",
+   "anchor": "examples",
+   "text": "The `error` object is abbreviated below — it is present in full on all of them.\n\n**422 (model declined the content)** — `CONTENT_POLICY_DECLINED`:\n```json\n{\n  \"detail\": \"The model declined this request — its content policy was triggered by the prompt or a reference image. Adjust and retry.\",\n  \"error\": {\n    \"code\": \"CONTENT_POLICY_DECLINED\",\n    \"detail\": {\"finish_reason\": \"SAFETY\"}\n  }\n}\n```\nThis is the model's own refusal, not a Relay policy check and not a validation\nfailure. It is returned on the image endpoints when the provider answers\nsuccessfully but produces no image. Note that a reference image can trigger it\non its own, with a prompt that is fine.\n\nThe message is hedged when the model gave no explicit safety verdict but did\ngenerate an image that was then withheld:\n\n```json\n{\n  \"detail\": \"The generated image was withheld, most likely by the provider's content policy — adjust the prompt or reference image and retry.\",\n  \"error\": {\n    \"code\": \"CONTENT_POLICY_DECLINED\",\n    \"detail\": {\"finish_reason\": \"OTHER\"}\n  }\n}\n```\n\nBorderline content is **not** always deterministic — the same request can be\ndeclined once and succeed on a retry. Treat a single decline as a signal about\nthe content, not a verdict on it.\n\n**422 (model replied in words)** — `IMAGE_TEXT_RESPONSE`:\n```json\n{\n  \"detail\": \"The model replied with text instead of an image; its reply is in error.detail.text. That usually means it declined the content, or the prompt read as a question rather than an instruction to generate an image.\",\n  \"error\": {\n    \"code\": \"IMAGE_TEXT_RESPONSE\",\n    \"detail\": {\n      \"finish_reason\": \"STOP\",\n      \"block_reason\": null,\n      \"text\": \"I cannot create images of official identification documents, including passports.\"\n    }\n  }\n}\n```\nThe provider answered normally; the model just wrote a sentence where the image\nbelonged. Two very different things arrive in this identical shape — a content\nrefusal, and a prompt the model read as a question and simply answered — so the\ncode deliberately does not choose between them and hands you the reply instead.\n`detail.text` is the diagnosis: if it reads as a refusal, change the content; if\nit reads as an answer, phrase the prompt as an instruction to generate an image.\n\n**502 (model produced no image)** — `IMAGE_NO_OUTPUT`:\n```json\n{\n  \"detail\": \"The model returned no image for this request. If it repeats with the same input, adjust the prompt or the reference image.\",\n  \"error\": {\n    \"code\": \"IMAGE_NO_OUTPUT\",\n    \"detail\": {\"finish_reason\": null}\n  }\n}\n```\nDistinct from `PROVIDER_UNAVAILABLE`: the provider call succeeded, and the\nresponse simply carried no image.\n\n**502 (a provider failed the request)** — `UPSTREAM_ERROR`:\n```json\n{\n  \"detail\": \"Upstream service error. Contact support with request_id=direct:… if this persists.\",\n  \"error\": {\n    \"code\": \"UPSTREAM_ERROR\",\n    \"detail\": {\"upstream_code\": \"model_server_error\"}\n  }\n}\n```\nA provider accepted this request and failed while serving it. Retry; if it\npersists, contact support with the `request_id`. `detail.upstream_code` is the\nprovider's own machine code where it sent one, `null` where it did not — it is\nreported, never interpreted. `PROVIDER_UNAVAILABLE` carries the same field when\na provider answered but refused the call (quota, balance, rate limit); it is\nabsent when no provider was reached at all, which is itself the distinction.\n\nThis is the half of 502 where a provider took the request and then broke.\n`PROVIDER_UNAVAILABLE` is the other half: **no provider could take this request\nright now** — none is registered for the model, every one is paused after\nrepeated failures, your tier cannot wait for a busy one, or the provider we\nreached refused the call outright (quota, balance, rate limit). Retry later. The line between them is whether anything was *served*,\nnot whether anything answered. The prefixes carry it throughout: `UPSTREAM_*`\nmeans the provider answered badly while serving (`UPSTREAM_ERROR`,\n`UPSTREAM_INVALID_REQUEST`, `UPSTREAM_TIMEOUT`); `PROVIDER_*` describes whether\nany provider could serve you at all.\n\n**401 (invalid or revoked key)** — `INVALID_API_KEY` / `KEY_REVOKED`:\n```json\n{\"detail\": \"Invalid API key\"}\n```\n```json\n{\"detail\": \"This API key has been revoked. Use an active key or contact the key issuer.\"}\n```\n\n**402 (two variants)** — `INSUFFICIENT_CREDITS` when the account wallet is\nempty, `KEY_BUDGET_EXHAUSTED` when a partner sub-key's own budget is depleted:\n```json\n{\"detail\": \"Insufficient credits for this model. Top up your account to continue.\"}\n```\n```json\n{\"detail\": \"KEY_BUDGET_EXHAUSTED: this API key's budget is depleted. Topup via POST /v2/customer/keys/{key}/topup.\"}\n```\n\n> **Avoid the surprise:** opt into an `X-Credit-Warning: true` response header\n> *before* your wallet hits `402`; see\n> [Low-credit warnings](keys.md#low-credit-warnings).\n\n**403 (the message names what blocked you)** — `SCOPE_DENIED`,\n`MODEL_NOT_AVAILABLE` when the model is not served at all, or\n`TIER_FEATURE_UNAVAILABLE` when a guest request asks for `store_output` storage:\n```json\n{\"detail\": \"Your tier does not have access to openai.openai/gpt-5.4 in direct mode\"}\n```\n```json\n{\"detail\": \"direct.openai.openai/gpt-5.4 is blocked by your account's model allowlist (set by your key issuer). Allowed models: direct.anthropic.anthropic/claude-haiku-4-5-20251001\"}\n```\n```json\n{\"detail\": \"openai.openai/gpt-5.4 is not available for unauthenticated (guest) access. Provide an API key (X-API-Key header) to use this model.\"}\n```\n\n**400 (upstream rejected the request itself)** — `UPSTREAM_INVALID_REQUEST`,\nwhere the message comes from the model provider's own validation:\n```json\n{\"detail\": \"Invalid param: Could not finish the message because max_tokens or model output limit was reached. Please try again with higher max_tokens.\"}\n```\n\n**429 (rate limited)** — `RATE_LIMITED`, with `Retry-After: 60` header:\n```json\n{\"detail\": \"Rate limit exceeded: 16/15 RPM for direct mode (tier: basic)\"}\n```\n\n**503 (at capacity)** — `CAPACITY_EXHAUSTED`, with `Retry-After: 5` header:\n```json\n{\"detail\": \"Model temporarily at capacity. Please retry later.\"}\n```"
+  },
+  {
+   "page": "reference/errors.md",
+   "title": "Errors",
+   "heading": "Async tasks",
+   "anchor": "async-tasks",
+   "text": "A failed task's poll response (and the matching failure webhook) carries the\nsame trio as the synchronous envelope: the human `error` string, a\nmachine-readable `error_code`, and `error_detail` — the structured payload that\nappears as `error.detail` on a synchronous response.\n\n```json\n{\n  \"task_id\": \"direct:7b4b4241-e024-4a65-b490-c200b871b989\",\n  \"status\": \"failed\",\n  \"error\": \"Provider error 500: Failed to download https://example.com/x.png\",\n  \"error_code\": \"PROVIDER_UNAVAILABLE\",\n  \"error_detail\": null\n}\n```\n\nOn an image task that produced nothing, `error_detail` carries the model's own\nverdict — the same `{\"finish_reason\": ..., \"block_reason\": ..., \"text\": ...}`\nobject described above:\n\n```json\n{\n  \"status\": \"failed\",\n  \"error\": \"The generated image was withheld, most likely by the provider's content policy — adjust the prompt or reference image and retry.\",\n  \"error_code\": \"CONTENT_POLICY_DECLINED\",\n  \"error_detail\": {\"finish_reason\": \"OTHER\", \"block_reason\": null, \"text\": null}\n}\n```\n\nBoth keys are always present and are `null` on tasks that failed before they\nshipped, and on failures that carry no structured detail.\n\nStreaming responses that fail before the first chunk keep their existing\nOpenAI-shaped error body, `{\"error\": {\"message\": ..., \"type\": ...}}`, with no\n`detail` key; where `error.code` is present it is the numeric HTTP status, not\na catalog code. That surface is deliberately unchanged so SDK stream parsing\nkeeps working.\n\nIn the OpenAPI spec the error envelope is the `RelayErrorResponse` schema and this stream body is `StreamErrorResponse`.\n\nFor per-endpoint response schemas, see the [API Explorer](https://docs.relaygpu.com/reference/api-explorer)."
+  },
+  {
+   "page": "reference/keys.md",
+   "title": "API Keys & Account",
+   "heading": "API Keys & Account",
+   "anchor": "api-keys-account",
+   "text": "Your account holds your API keys, your profile and your credit balance. The\nroutes on this page take your dashboard **JWT** (or, on partner tiers, your\n[superkey](enterprise.md#superkey)); a regular API key gets `403`."
+  },
+  {
+   "page": "reference/keys.md",
+   "title": "API Keys & Account",
+   "heading": "Key basics",
+   "anchor": "key-basics",
+   "text": "Mint keys in the [dashboard](https://dashboard.relaygpu.com) or via the API:\n\n```bash\ncurl -X POST https://relaygpu.com/v2/customer/keys \\\n  -H \"Authorization: Bearer YOUR_JWT\" \\\n  -H \"Content-Type: application/json\" \\\n  -d '{\"name\": \"production\"}'\n# → {\"key\": \"relay_sk_...\", \"key_id\": \"key_1a2b3c...\", ...}\n```\n\n`YOUR_JWT` is your dashboard session token; see\n[Dashboard / JWT auth](../introduction/authentication.md#dashboard-jwt-auth).\nOn partner tiers the superkey works in its place.\n\n- The full secret (`relay_sk_...`) is returned **once, at mint**; store it\n  then. Every later listing shows it masked.\n- Every key has a non-secret **`key_id`**; use it to address the key in all\n  management calls (`PATCH`, `/revoke`, `/topup`, `/usage/{key_id}`, ...). The\n  secret is **not** accepted in a URL path (a `relay_sk_...` there returns\n  `400`) — it would leak into logs and proxies; address keys by `key_id`.\n- **Edit a key** with `PATCH /v2/customer/keys/{key_id}`, sending only what\n  you're changing: `name` (400 on duplicate) and/or `restrictions` (per-key\n  model blacklist + rate limits, each at or below your tier's limit, otherwise\n  `400`; the object is **replaced**, not merged). Partner tiers can also change `key_budget`; see\n  [Enterprise & Partners](enterprise.md#per-key-budgets).\n- Lost a secret? Revoke the key and mint a new one.\n- Revoking is **reversible** (`/unrevoke`); `DELETE` on a revoked key is the\n  permanent operation."
+  },
+  {
+   "page": "reference/keys.md",
+   "title": "API Keys & Account",
+   "heading": "Listing keys",
+   "anchor": "listing-keys",
+   "text": "`GET /v2/customer/keys` lists your keys (newest first, secrets masked). Auth:\nJWT or superkey.\n\n```bash\ncurl \"https://relaygpu.com/v2/customer/keys?limit=100\" \\\n  -H \"Authorization: Bearer YOUR_JWT\"\n```\n\n- **Filter**: `status=active|revoked` and/or `name=<exact>`. The `name` filter\n  doubles as the by-name lookup (returns just the matching key).\n- **Search**: `name_prefix=<prefix>` matches names starting with the prefix\n  (case-insensitive), built for large key fleets (one key per app or end\n  user). Mutually exclusive with `name`.\n- **Superkey**: `is_superkey=true` returns only the account superkey (`false`\n  excludes it). Combine with `status` — `?is_superkey=true&status=active&limit=1`\n  answers \"does an active superkey exist?\" from `total`, no paging needed.\n- **Paginate**: cursor-based, stable under concurrent mint/revoke. Pass `limit`\n  (default 100, max 1000); when `has_more` is `true`, pass the returned\n  `next_cursor` as `starting_after` for the next page:\n\n```bash\ncurl \"https://relaygpu.com/v2/customer/keys?limit=100&starting_after=key_1a2b3c\" \\\n  -H \"Authorization: Bearer YOUR_JWT\"\n```\n\nResponse envelope: `{ total, max_allowed, limit, has_more, next_cursor, keys }`."
+  },
+  {
+   "page": "reference/keys.md",
+   "title": "API Keys & Account",
+   "heading": "The `__relayfront__` system key",
+   "anchor": "the-relayfront-system-key",
+   "text": "Inference fired from the dashboard (with your login session, no API key) is\nattributed to an automatic system key named `__relayfront__` — you'll see it\nin `GET /keys` and `GET /usage` with `\"system\": true` once you've used the\ndashboard playground. It is not a usable credential and it's read-only:\nrename/revoke/delete/promote/topup return `400`, and it never counts toward\nyour tier's key limit. Key names starting with `__` are reserved for system\nkeys, so your own keys can't collide with it."
+  },
+  {
+   "page": "reference/keys.md",
+   "title": "API Keys & Account",
+   "heading": "Your profile",
+   "anchor": "your-profile",
+   "text": "`GET /v2/customer/profile` returns your own account: profile, tier, and\ncredit balance. Authenticate with your **JWT**, or (on enterprise/partner\naccounts) your **superkey**. Regular inference keys can't read account\nroutes.\n`GET /v2/customer/credits` returns just the balance, same auth.\n\n```bash\ncurl https://relaygpu.com/v2/customer/profile \\\n  -H \"Authorization: Bearer YOUR_JWT\"\n```\n\n`ProfileResponse` fields: `customer_id`, `name`, `email`, `email_verified`,\n`tier`, `status`, `created_at`, `credits`, `tier_details`,\n`sub_key_model_allowlist`, `warning_threshold`. `tier_details` carries `max_api_keys`,\n`current_keys`, `rate_limits`, `model_restrictions`, and the partner-feature\nflags `is_custom` / `allow_subkeys`. `sub_key_model_allowlist` is the current\ncustomer-wide [model allowlist](enterprise.md#model-access) (`null` unless\nyou're on a partner tier and have set one).\n\nThis is the authoritative way to check which tier you're on; the public\n`model_restrictions_per_tier` matrix tells you what each tier can call, not\nwhich one is yours. `tier_details.is_custom` tells you whether it's a partner\n(enterprise) tier."
+  },
+  {
+   "page": "reference/keys.md",
+   "title": "API Keys & Account",
+   "heading": "Low-credit warnings",
+   "anchor": "low-credit-warnings",
+   "text": "Opt into a heads-up before you run dry. Set a per-account **`warning_threshold`**\n(in credits); while your wallet balance is below it, **every inference\nresponse carries the header `X-Credit-Warning: true`** (a flag, no amount),\nwhether it was authenticated with an API key or your dashboard login.\nAccount and management routes never carry it. `0` (the default) turns it off.\n\n```bash\ncurl -X PATCH https://relaygpu.com/v2/customer/settings \\\n  -H \"Authorization: Bearer YOUR_JWT\" \\\n  -H \"Content-Type: application/json\" \\\n  -d '{\"warning_threshold\": 20}'\n```\n\n- It's the **soft** counterpart to the hard `402` (out of credits): a nudge to\n  top up while you're still being served. The header only ever appears while\n  you're below the line, so treat \"header present\" as \"top up soon\".\n- Auth: JWT, or (enterprise/partner) your superkey. `warning_threshold` must be\n  `≥ 0` (`422` otherwise).\n- **Enterprise & partner accounts:** the flag is account-wide, so the keys you\n  issue carry it too. Details in [Enterprise & Partners](enterprise.md)."
+  },
+  {
+   "page": "reference/keys.md",
+   "title": "API Keys & Account",
+   "heading": "Where your numbers live",
+   "anchor": "where-your-numbers-live",
+   "text": "Spend, tokens, latency percentiles, and error splits — queryable over time,\nby model and by key — are on **[Usage & Metrics](usage-metrics.md)**. Partner\ntooling (superkey, per-key budgets, allowlists, custom pricing) is on\n**[Enterprise & Partners](enterprise.md)**.\n\nFull endpoint reference:\n[API Explorer → Customer](https://docs.relaygpu.com/reference/api-explorer)."
+  },
+  {
+   "page": "reference/models.md",
+   "title": "Models",
+   "heading": "Models",
+   "anchor": "models",
+   "text": "`GET /v2/models` lists every model you can call. Each entry names the route\nthat serves it in `endpoint`, so a model name is all you need to build a\nrequest. `GET /v2/models/{model}` returns one model with its route and its\nlist prices. Neither call needs an API key."
+  },
+  {
+   "page": "reference/models.md",
+   "title": "Models",
+   "heading": "The `endpoint` object",
+   "anchor": "the-endpoint-object",
+   "text": "| Field | Meaning |\n|-------|---------|\n| `method`, `path` | The route to call, e.g. `POST /v2/openai/v1/chat/completions` |\n| `operation_id` | The route's `operationId` in the [OpenAPI spec](api-explorer/README.md) |\n| `model_in_body` | `true`: send the name as `model` in the body. `false`: the route serves this one model and names it itself, so send no `model` |\n| `model_default` | The model the route uses when the body leaves `model` out; `null` when `model` is required or not taken |\n| `async_default` | `true` on video routes: they answer `202` with a `task_id` unless you send `async: false` |\n| `streams` | Whether the route can stream its response with `stream: true` |\n\n`endpoint` is always present. It is `null` only when no single route can be\nnamed for a model. `GET /v2/models/{model}` adds what to send to it and what\ncomes back, so one call gives you the schema and then the run:\n\n| Field | Meaning |\n|-------|---------|\n| `request_schema` | The route's request body as JSON Schema, every reference resolved |\n| `request_schema_url` | Where that schema lives in the [OpenAPI document](api-explorer/README.md) |\n| `request_example` | A request body that runs as-is for this model: the route's first documented example, with `model` set to this model where the body takes one. `null` when the route documents none |\n| `response_schema` | What the route returns, as JSON Schema: the body on `200`, or the task's `result` when the route answers `202` (see `async_default`). `null` when `endpoint` is `null` or the route documents no response body |\n| `response_schema_url` | Where the response schema lives in the OpenAPI document |"
+  },
+  {
+   "page": "reference/models.md",
+   "title": "Models",
+   "heading": "Get one model",
+   "anchor": "get-one-model",
+   "text": "`model` is the canonical name exactly as `GET /v2/models` lists it, slashes\nincluded:\n\n```bash\ncurl https://relaygpu.com/v2/models/openai/gpt-5.4\n```\n\n```json\n{\n  \"name\": \"openai/gpt-5.4\",\n  \"display_name\": \"GPT-5.4\",\n  \"tag\": \"text-to-text\",\n  \"modes\": [\"auto\", \"direct\"],\n  \"sources\": [\"openai\"],\n  \"endpoint\": {\n    \"method\": \"POST\",\n    \"path\": \"/v2/openai/v1/chat/completions\",\n    \"operation_id\": \"openai_chat_completions\",\n    \"model_in_body\": true,\n    \"model_default\": null,\n    \"async_default\": false,\n    \"streams\": true\n  },\n  \"request_schema\": {\"type\": \"object\", \"required\": [\"model\", \"messages\"], \"properties\": {\"model\": {\"type\": \"string\"}, \"messages\": {\"type\": \"array\", \"items\": {\"...\": \"...\"}}, \"...\": \"...\"}},\n  \"request_schema_url\": \"https://relaygpu.com/v2/openapi-public.json#/components/schemas/OpenAIChatRequest\",\n  \"request_example\": {\"model\": \"openai/gpt-5.4\", \"messages\": [{\"role\": \"user\", \"content\": \"Explain the difference between TCP and UDP in simple terms\"}], \"max_tokens\": 512, \"temperature\": 0.7},\n  \"response_schema\": {\"type\": \"object\", \"properties\": {\"id\": {\"type\": \"string\"}, \"choices\": {\"type\": \"array\", \"items\": {\"...\": \"...\"}}, \"...\": \"...\"}},\n  \"response_schema_url\": \"https://relaygpu.com/v2/openapi-public.json#/components/schemas/OpenAIChatResponse\",\n  \"store_output_supported\": false,\n  \"restricted_tiers\": [\"guest\"],\n  \"pricing\": [\n    {\"mode\": \"direct\", \"model\": \"openai.openai/gpt-5.4\", \"billing_type\": \"per_token\", \"per_1m_input_tokens\": 2.5, \"per_1m_output_tokens\": 15.0}\n  ],\n  \"available\": true,\n  \"status\": \"available\"\n}\n```\n\n- `modes` lists `auto` whenever the model runs in any mode (see [Modes](modes.md)).\n- `restricted_tiers` names the default tiers barred from the model (see `GET /v2/tiers`).\n- `pricing` carries the same rows `GET /v2/pricing` lists for the model. These\n  are list prices: a custom (partner) tier may have its own contract rates,\n  which are not shown here.\n- `status: \"retired\"` means the model is no longer offered and requests for it\n  are refused. `modes`, `sources` and `pricing` are then empty; `endpoint`\n  still names the route that served it where one exists.\n- An unknown name returns `404` with code `MODEL_NOT_FOUND` (see [Errors](errors.md))."
+  },
+  {
+   "page": "reference/models.md",
+   "title": "Models",
+   "heading": "Media inputs",
+   "anchor": "media-inputs",
+   "text": "Request fields that take media by link (`image_url`, `video_url`, `audio_url`,\n`reference_video_url`, and the like) accept any public `https` URL. To use a\nfile from your own machine, upload it with [Files](../endpoints/files.md) first\nand pass the returned `url`. Some routes take source video or audio **only** as\na URL; the [Video](../endpoints/video.md#source-video-and-audio-inputs) and\n[Audio](../endpoints/audio.md) pages name them."
+  },
+  {
+   "page": "reference/modes.md",
+   "title": "Modes",
+   "heading": "Modes",
+   "anchor": "modes",
+   "text": "Every inference request runs in one **mode**. You choose it with the `mode`\nfield in the request **body** (not a header or query parameter). Leave it out\nand it defaults to `auto`."
+  },
+  {
+   "page": "reference/modes.md",
+   "title": "Modes",
+   "heading": "Modes",
+   "anchor": "modes-1",
+   "text": "| Mode | Latency | Trust | Description |\n|------|---------|-------|-------------|\n| `direct` | <1s | Relay-managed | Managed GPU providers |\n| `opengpu` | 1-2s | Trustless | [OpenGPU Network](https://opengpu.network): permissionless, redundant computing, on-chain settlement |\n| `auto` (default) | — | — | Relay picks `direct` or `opengpu` for you (below) |"
+  },
+  {
+   "page": "reference/modes.md",
+   "title": "Modes",
+   "heading": "Usage",
+   "anchor": "usage",
+   "text": "```json\n{\n  \"model\": \"openai/gpt-5.4\",\n  \"messages\": [{\"role\": \"user\", \"content\": \"Hello\"}],\n  \"mode\": \"direct\"\n}\n```\n\n- **`auto`** uses `direct` when the model is available to you there, otherwise\n  `opengpu`, otherwise the request is refused with `403`. It chooses once,\n  before the request runs: a request that fails in one mode is not retried in\n  the other.\n- **Not every model runs in both modes**, and many routes are direct-only (their\n  `mode` field accepts only `auto` or `direct`). `GET /v2/models` lists the\n  models per mode; asking for a mode a model does not run in returns `403`.\n- **Mode availability is live data, not a promise.** `GET /v2/models` is the\n  only source for which models run in `opengpu` right now; that list can be\n  empty, in which case `auto` serves everything in `direct`.\n- Streaming and webhooks are direct-mode only."
+  },
+  {
+   "page": "reference/modes.md",
+   "title": "Modes",
+   "heading": "Telling which mode served you",
+   "anchor": "telling-which-mode-served-you",
+   "text": "Responses have the same shape in every mode, so SDKs parse them unchanged.\nResponses and task records carry a `task_id` (`direct:{uuid}` or\n`opengpu:{uuid}`) and a `mode` field naming the mode that served the request.\nOpenGPU tasks also carry a `task_address` (a blockchain address, verifiable on\n[ogpuscan.io](https://ogpuscan.io))."
+  },
+  {
+   "page": "reference/rate-limits.md",
+   "title": "Rate Limits",
+   "heading": "Rate Limits",
+   "anchor": "rate-limits",
+   "text": "Requests are limited per minute (RPM) by your tier. Each tier has three\nlimits: one for `direct` mode, one for `opengpu` mode, and a `global` limit\nacross both. A request must fit under its mode's limit and the global one.\n\nLimits are **per customer**: all your API keys share one pool, so adding keys\ndoes not add capacity."
+  },
+  {
+   "page": "reference/rate-limits.md",
+   "title": "Rate Limits",
+   "heading": "Your limits",
+   "anchor": "your-limits",
+   "text": "The limits are tuned over time, so read them live from `GET /v2/tiers` rather\nthan hard-coding them:\n\n```bash\ncurl https://relaygpu.com/v2/tiers -H \"X-API-Key: YOUR_KEY\"\n```\n\nEach entry in `tiers` carries `rate_limits` (`direct`, `opengpu`, `global`,\nin requests per minute) and `max_keys`; `current_tier` is the tier of the key\nyou sent (`guest` without one). Guests get the lowest limits.\n\nPartner tiers can also cap individual keys below the tier limit; see\n[API Keys & Account](keys.md).\n\n**Need higher limits?** [Contact us](mailto:info@opengpu.network) about\nenterprise options."
+  },
+  {
+   "page": "reference/rate-limits.md",
+   "title": "Rate Limits",
+   "heading": "When you hit a limit",
+   "anchor": "when-you-hit-a-limit",
+   "text": "```\nHTTP 429 Too Many Requests\nRetry-After: 60\n```\n\n```json\n{\"detail\": \"Rate limit exceeded: 16/15 RPM for direct mode (tier: basic)\"}\n```\n\nThe `error.code` is `RATE_LIMITED`. The message reports your current count,\nthe limit, which pool you hit, and your tier. Hitting the global pool reads\n`Global rate limit exceeded: 21/20 RPM across all modes (tier: basic)`. The\nwindow is one minute; wait `Retry-After` seconds before retrying."
+  },
+  {
+   "page": "reference/usage-metrics.md",
+   "title": "Usage & Metrics",
+   "heading": "Usage & Metrics",
+   "anchor": "usage-metrics",
+   "text": "One place to answer \"what did my traffic do\": spend, tokens, latency, and\nerrors — queryable over time, grouped by model or key.\n\n| You want | Endpoint | View | Available on |\n|---|---|---|---|\n| Credit balance right now | `GET /v2/customer/credits` | single number | all tiers |\n| Spend & tokens per key and model | `GET /v2/customer/usage` | lifetime totals, or a daily breakdown up to 30 days | all tiers |\n| Cost/token time-series to bill your own users | `GET /v2/customer/usage/timeseries` | `1m`/`1h`/`1d` buckets; group & filter by model and key | **partner tiers only** ([Enterprise & Partners](enterprise.md#per-key-cost)) |\n| Latency percentiles (incl. TTFT) + success/error splits | `GET /v2/customer/metrics` | `1m`/`1h`/`1d` buckets; group by model, source, mode, key | all tiers |\n\nAuth for all of these: your **JWT**, or on enterprise/partner accounts your\n**superkey** ([keys explained](keys.md)). Regular inference keys can't read\naccount data. Your balance also comes with\n[`GET /v2/customer/profile`](keys.md#your-profile)."
+  },
+  {
+   "page": "reference/usage-metrics.md",
+   "title": "Usage & Metrics",
+   "heading": "Usage & cost",
+   "anchor": "usage-cost",
+   "text": "`GET /v2/customer/usage` returns **one entry per key** (secrets masked), each\nbroken down as nested `{mode: {source: {model: {...}}}}` objects carrying\n`requests`, `credits` (the cost), `input_tokens` and `output_tokens`, plus the\nkey's remaining `key_budget` where one is set. `GET /v2/customer/usage/{key_id}` is\nthe same view for a single key.\n\nWith [prompt caching](../endpoints/chat.md#prompt-caching-anthropic), `input_tokens` counts the whole prompt: fresh input, cache reads and cache writes together. The partner time-series below also reports `cached_input_tokens` (cache reads) separately.\n\n```bash\n# All keys, lifetime totals per model\ncurl https://relaygpu.com/v2/customer/usage \\\n  -H \"Authorization: Bearer YOUR_JWT\"\n\n# One key, daily breakdown\ncurl \"https://relaygpu.com/v2/customer/usage/{key_id}?period=7d\" \\\n  -H \"Authorization: Bearer YOUR_JWT\"\n```\n\nThe query picks one of two mutually exclusive views:\n\n- **No date params** → `lifetime` totals (all-time).\n- **`period=7d`/`30d`**, or **`from`+`to`** (`YYYY-MM-DD`, both required) →\n  `by_date` daily breakdown. Max 30 days either way, and `period` can't be\n  combined with `from`/`to` (400).\n\nLarge key fleets should paginate: pass `limit` (max 1000) to page newest-first,\nthen pass the response's `next_cursor` back as `starting_after` while\n`has_more` is true (the same cursor grammar as `GET /keys`). Omitting `limit`\nreturns every key in one response. Envelope:\n`{ total, limit, has_more, next_cursor, keys, query }`.\n\nThere is also a **queryable** cost view for billing your own users\n(`GET /v2/customer/usage/timeseries`: group and filter by model and `key_id`\nover any date range). It is **available on partner (custom) tiers only** —\nstandard tiers get `403` and should use `GET /v2/customer/usage` above. See\n[Enterprise & Partners](enterprise.md#per-key-cost)."
+  },
+  {
+   "page": "reference/usage-metrics.md",
+   "title": "Usage & Metrics",
+   "heading": "Metrics",
+   "anchor": "metrics",
+   "text": "`GET /v2/customer/metrics` returns bucketed latency + reliability time-series\nover your own traffic: request/success/error counts (with a user-vs-upstream\nerror split) and **p50/p90/p95/p99 latency**, end-to-end and upstream\nseparately, so you can tell \"Relay overhead\" from \"the model was slow\".\nAvailable on **every** tier. Cost/tokens live in `/usage` (above); this\nendpoint owns latency and reliability, not spend.\n\n```bash\ncurl \"https://relaygpu.com/v2/customer/metrics?start_time=1783000800&bucket_width=1h&group_by=model\" \\\n  -H \"Authorization: Bearer YOUR_JWT\"\n```"
+  },
+  {
+   "page": "reference/usage-metrics.md",
+   "title": "Usage & Metrics",
+   "heading": "Query parameters",
+   "anchor": "query-parameters",
+   "text": "| Param | Type | Notes |\n|---|---|---|\n| `start_time` | int (unix s) | **required**, inclusive |\n| `end_time` | int (unix s) | defaults to now, exclusive; **pin it when paginating** (below) |\n| `bucket_width` | `1m` \\| `1h` \\| `1d` | default `1d` |\n| `group_by` | repeatable | `model`, `source`, `mode`, `key_id`; splits each bucket into per-value rows |\n| `models` / `sources` / `modes` / `key_ids` | repeatable | filter to matching traffic |\n| `limit` | int | buckets per page; default/max by width: `1d` 7/31, `1h` 24/168, `1m` 60/1440 |\n| `page` | string | opaque cursor from a previous `next_page` |"
+  },
+  {
+   "page": "reference/usage-metrics.md",
+   "title": "Usage & Metrics",
+   "heading": "Response",
+   "anchor": "response",
+   "text": "```json\n{\n  \"object\": \"page\",\n  \"data\": [\n    {\n      \"object\": \"bucket\",\n      \"start_time\": 1783000800,\n      \"end_time\": 1783004400,\n      \"results\": [\n        {\n          \"request_count\": 1240,\n          \"success_count\": 1231,\n          \"error_count\": 9,\n          \"user_error_count\": 7,\n          \"upstream_error_count\": 2,\n          \"unclassified_error_count\": 0,\n          \"latency_ms\":          { \"p50\": 812.3, \"p90\": 1503.1, \"p95\": 1902.7, \"p99\": 3110.0, \"sample_count\": 1231 },\n          \"provider_latency_ms\": { \"p50\": 640.1, \"p90\": 1310.5, \"p95\": 1700.2, \"p99\": 2880.4, \"sample_count\": 1231 },\n          \"ttft_ms\":             { \"p50\": 210.4, \"p90\": null,   \"p95\": null,   \"p99\": null,   \"sample_count\": 6 },\n          \"model\": \"openai/gpt-5.2\"\n        }\n      ]\n    }\n  ],\n  \"summary\": {\n    \"object\": \"summary\",\n    \"start_time\": 1783000800,\n    \"end_time\": 1783087200,\n    \"results\": [\n      { \"request_count\": 28840, \"success_count\": 28610, \"error_count\": 230,\n        \"latency_ms\": { \"p50\": 806.2, \"p90\": 1498.0, \"p95\": 1890.4, \"p99\": 3020.1, \"sample_count\": 28610 } }\n    ]\n  },\n  \"has_more\": true,\n  \"next_page\": \"1\"\n}\n```\n\n**Fields**\n- **Counts**: `request_count`, `success_count`, `error_count`, and the split: `user_error_count` (4xx-class), `upstream_error_count` (5xx / infra), `unclassified_error_count` (no mappable status). `error_count` is the three summed, so counts always reconcile. The class comes from the status of the **verdict you received** — for a streamed request that failed after its first chunk, that is the status carried by the error event that ended the stream, not the `200` the connection opened with.\n- **Percentile sets**: `latency_ms` (end-to-end), `provider_latency_ms` (upstream provider call), and `ttft_ms` (time-to-first-token, **streaming only**: request receipt → first SSE chunk). All three are computed over **successful requests only** — errors are counted in the error split, never timed. Each is `{ p50, p90, p95, p99 }` in **milliseconds** plus a **`sample_count`** (how many requests fed it). A percentile is `null` when there aren't enough samples to be trustworthy, not only when the bucket is empty: `p50` needs ≥1 sample, `p90` ≥10, `p95` ≥20, `p99` ≥100. So a 6-request bucket reports `p50` but nulls `p90/p95/p99` (a \"p99\" over 6 requests is just the single slowest one, not a real tail). `ttft_ms` is also null wherever there's no streamed traffic. Percentiles are approximate, and `sample_count` is never above `success_count`.\n- **Summary**: alongside `data`, a top-level **`summary`** object carries the **whole-range** totals: the same row shape as a bucket's `results`, but aggregated over the entire range (not per bucket, not per page), with `start_time` and `end_time` aligned to bucket edges. Use it for headline numbers without summing pages yourself. The sample floors above apply here too, but pooling the whole range usually clears a floor a thin bucket couldn't.\n- **Dimension echoes**: `model` / `source` / `mode` / `key_id` appear on a row **only** when you `group_by` that dimension; grouping by `key_id` also attaches the key's **`key_name`**. An empty bucket returns one zero-filled row carrying **no** dim keys, so grouped charts don't sprout a phantom `null` series."
+  },
+  {
+   "page": "reference/usage-metrics.md",
+   "title": "Usage & Metrics",
+   "heading": "Pagination",
+   "anchor": "pagination",
+   "text": "Windows are sliced by time, `limit` buckets per page; `has_more` + `next_page` drive it (pass `next_page` back as `page`). Two rules:\n- **Pin `end_time`** across pages. It defaults to `now`, so omitting it shifts the window between requests and makes `has_more`/counts drift.\n- `next_page` is **opaque** (currently numeric, but don't parse it); pass it back verbatim.\n\nFull endpoint reference:\n[API Explorer → Metrics](https://docs.relaygpu.com/reference/api-explorer)."
+  },
+  {
+   "page": "sdk/typescript.md",
+   "title": "TypeScript SDK",
+   "heading": "TypeScript SDK",
+   "anchor": "typescript-sdk",
+   "text": "Package [`@relaygpu/client`](https://www.npmjs.com/package/@relaygpu/client) · source and issues: [github.com/OpenGPU-Network/relaygpu-node](https://github.com/OpenGPU-Network/relaygpu-node)\n\n> **Status: pre-release (0.x).** The API may change before 1.0.\n\nThe TypeScript client for [Relay](https://relaygpu.com): image, video and audio generation, async tasks,\nfile uploads, webhook verification, workflows, account and keys, with typed errors. Request and response\ntypes are generated from Relay's public OpenAPI spec. Chat is not wrapped: point the OpenAI or Anthropic\nSDK at Relay ([quickstart 6](#6-chat-use-the-sdk-you-already-have)).\n\n```bash\nnpm install @relaygpu/client\n```\n\nNode ≥ 18, Bun, Deno and Cloudflare Workers. No runtime dependencies (only `fetch` and WebCrypto)."
+  },
+  {
+   "page": "sdk/typescript.md",
+   "title": "TypeScript SDK",
+   "heading": "The client",
+   "anchor": "the-client",
+   "text": "```ts\nimport { Relay } from \"@relaygpu/client\";\n\nconst relay = new Relay({\n  apiKey: process.env.RELAY_API_KEY, // relay_sk_…, sent as X-API-Key. Or { jwt } for a dashboard login token.\n  baseUrl: \"https://relaygpu.com\",   // the default\n  timeoutMs: 600_000,                // per HTTP attempt (default 10 min)\n  retry: { maxRetries: 2, maxRateLimitRetries: 3, maxRetryAfterMs: 60_000 }, // the defaults; `false` disables retries\n});\n```\n\nThe key never appears in an error, a log line or `JSON.stringify(relay)`. Catalog reads (`models`,\n`pricing`, `tiers`, `health`) and task polls need no credential."
+  },
+  {
+   "page": "sdk/typescript.md",
+   "title": "TypeScript SDK",
+   "heading": "Quickstarts",
+   "anchor": "quickstarts",
+   "text": "Each one is a runnable file in [`examples/`](https://github.com/OpenGPU-Network/relaygpu-node/tree/main/examples) (how to run them: [examples/README.md](https://github.com/OpenGPU-Network/relaygpu-node/blob/main/examples/README.md)).\nThey read `RELAY_API_KEY`, and `RELAY_BASE_URL` when set."
+  },
+  {
+   "page": "sdk/typescript.md",
+   "title": "TypeScript SDK",
+   "heading": "1. Image",
+   "anchor": "1-image",
+   "text": "Generate an image with `Qwen/qwen-image`, print its link and save it. ([`examples/01-image.ts`](https://github.com/OpenGPU-Network/relaygpu-node/blob/main/examples/01-image.ts))\n\n```ts\nimport { writeFile } from \"node:fs/promises\";\nimport { tmpdir } from \"node:os\";\nimport { join } from \"node:path\";\nimport { Relay, ContentPolicyDeclinedError, InsufficientCreditsError } from \"@relaygpu/client\";\n\nconst relay = new Relay({ apiKey: process.env.RELAY_API_KEY, baseUrl: process.env.RELAY_BASE_URL });\n\ntry {\n  const { images } = await relay.image.generate(\"Qwen/qwen-image\", {\n    prompt: process.argv[2] ?? \"A red fox in an autumn forest\",\n    size: \"1024x1024\",\n  });\n  const image = images[0];\n  console.log(\"url:\", image.url); // a link that lives 1 h; pass { storeOutput: \"relay7d\" } to keep it longer\n\n  const blob = await image.toBlob();\n  const file = join(tmpdir(), `relay-image.${blob.type.split(\"/\")[1] || \"bin\"}`);\n  await writeFile(file, new Uint8Array(await blob.arrayBuffer()));\n  console.log(\"saved:\", file);\n} catch (e) {\n  // Status picks the class, error.code refines it: KeyBudgetExhaustedError is an InsufficientCreditsError (402).\n  if (e instanceof InsufficientCreditsError) console.error(`out of credit (${e.code}), request ${e.requestId}`);\n  else if (e instanceof ContentPolicyDeclinedError) console.error(\"the provider declined this prompt:\", e.message);\n  else throw e;\n  process.exitCode = 1;\n}\n```"
+  },
+  {
+   "page": "sdk/typescript.md",
+   "title": "TypeScript SDK",
+   "heading": "2. Video, waiting for the result",
+   "anchor": "2-video-waiting-for-the-result",
+   "text": "Kling v3 text-to-video, 3 seconds, standard quality. `wait: true` long-polls the task until it ends. ([`examples/02-video-wait.ts`](https://github.com/OpenGPU-Network/relaygpu-node/blob/main/examples/02-video-wait.ts))\n\n```ts\nimport { Relay, TaskFailedError } from \"@relaygpu/client\";\n\nconst relay = new Relay({ apiKey: process.env.RELAY_API_KEY, baseUrl: process.env.RELAY_BASE_URL });\n\ntry {\n  const task = await relay.video.generate(\n    \"KlingTeam/v3-T2V\",\n    { prompt: process.argv[2] ?? \"A paper boat drifting down a rain gutter\", duration: 3, quality_mode: \"std\" },\n    {\n      wait: true,\n      // Status transitions and elapsed time only: there is no queue position, log stream or cancel.\n      onProgress: (p) => console.log(`${p.status} after ${p.elapsed_seconds}s`),\n    },\n  );\n  const urls = task.result?.urls as string[] | undefined;\n  console.log(\"video:\", urls?.[0]); // expires 1 h after completion unless you pass storeOutput\n} catch (e) {\n  // The task ran and failed: e.code is the task's error_code (e.g. CONTENT_POLICY_DECLINED, UPSTREAM_TIMEOUT).\n  if (e instanceof TaskFailedError) console.error(`task ${e.taskId} failed: ${e.code ?? \"unclassified\"}: ${e.message}`);\n  else throw e;\n  process.exitCode = 1;\n}\n```"
+  },
+  {
+   "page": "sdk/typescript.md",
+   "title": "TypeScript SDK",
+   "heading": "3. Upload a file, then motion control",
+   "anchor": "3-upload-a-file-then-motion-control",
+   "text": "Both ways to send a local file: upload it explicitly (`files.upload`, here with 1-day retention), or put the `Blob` straight into a `*_url` field and let the SDK upload it. The submit returns the `202` without waiting. Arguments: a local video, then a character image URL. ([`examples/03-upload-motion-control.ts`](https://github.com/OpenGPU-Network/relaygpu-node/blob/main/examples/03-upload-motion-control.ts))\n\n```ts\nimport { readFile } from \"node:fs/promises\";\nimport { basename } from \"node:path\";\nimport { Relay, FileTooLargeError, ValidationError } from \"@relaygpu/client\";\n\nconst [videoPath, imageUrl] = process.argv.slice(2);\nif (!videoPath || !imageUrl) {\n  console.error(\"usage: npx tsx 03-upload-motion-control.ts <local video.mp4> <character image URL>\");\n  process.exit(2);\n}\n\nconst relay = new Relay({ apiKey: process.env.RELAY_API_KEY, baseUrl: process.env.RELAY_BASE_URL });\nconst video = new Blob([new Uint8Array(await readFile(videoPath))]); // media type sniffed from the bytes\n\ntry {\n  // Form 1, explicit: host the file yourself and get a link any *_url field takes.\n  // relay1h is free; relay1d / relay7d / relay30d are billed per file (GET /v2/pricing → media_storage).\n  const file = await relay.files.upload(video, { retention: \"relay1d\", filename: basename(videoPath) });\n  console.log(\"uploaded:\", file.file_id, file.url, \"expires\", file.expires_at);\n\n  // Form 2, implicit: put the Blob straight into a *_url field; the SDK uploads it first (relay1h unless\n  // opts.upload.retention says otherwise) and sends the link. `video_url: file.url` would work the same.\n  const accepted = await relay.video.generate(\"KlingTeam/v3-Motion-Control\", {\n    video_url: video,\n    image_url: imageUrl,\n    character_orientation: \"video\", // \"image\" | \"video\": which input decides the facing direction\n    duration: 5,\n    quality_mode: \"std\",\n  });\n  // No wait: the 202 envelope. Poll later with relay.tasks.wait(accepted.task_id), or pass webhookUrl.\n  console.log(\"task:\", accepted.task_id, accepted.replayed ? \"(replayed)\" : \"\");\n\n  // Take the explicit upload down now (idempotent; the fee is not refunded).\n  await relay.files.delete(file.file_id);\n  console.log(\"deleted:\", file.file_id);\n} catch (e) {\n  if (e instanceof FileTooLargeError) console.error(\"files are capped at 100 MB\");\n  else if (e instanceof ValidationError) console.error(`rejected (${e.code}):`, e.message);\n  else throw e;\n  process.exitCode = 1;\n}\n```"
+  },
+  {
+   "page": "sdk/typescript.md",
+   "title": "TypeScript SDK",
+   "heading": "4. Webhook receiver",
+   "anchor": "4-webhook-receiver",
+   "text": "Verify each delivery on its raw body and branch on `event`. The example file adds `--self-test`, which signs a delivery with a throwaway secret and posts it to itself, so it runs without a tunnel. ([`examples/04-webhook-receiver.ts`](https://github.com/OpenGPU-Network/relaygpu-node/blob/main/examples/04-webhook-receiver.ts))\n\n```ts\nimport { createServer, type IncomingMessage } from \"node:http\";\nimport { Relay, WebhookVerificationError } from \"@relaygpu/client\";\n\nconst relay = new Relay({ apiKey: process.env.RELAY_API_KEY, baseUrl: process.env.RELAY_BASE_URL });\n// The account's signing secret: relay.webhooks.secret() (JWT or superkey). During the 24 h after a\n// rotation, pass [current, previous] instead.\nconst secret = process.env.RELAY_WEBHOOK_SECRET;\nif (!secret) throw new Error(\"set RELAY_WEBHOOK_SECRET\");\n\nasync function rawBody(req: IncomingMessage): Promise<Buffer> {\n  const chunks: Buffer[] = [];\n  for await (const chunk of req) chunks.push(chunk as Buffer);\n  return Buffer.concat(chunks); // verify the bytes as sent, never a re-serialised JSON.parse result\n}\n\nconst server = createServer(async (req, res) => {\n  try {\n    const event = await relay.webhooks.verify(await rawBody(req), req.headers, secret);\n    // Delivery is at-least-once: dedupe on req.headers[\"webhook-id\"] in production.\n    switch (event.event) {\n      case \"task.completed\":\n        console.log(\"task done:\", event.task_id, event.result);\n        break;\n      case \"task.failed\":\n        console.log(\"task failed:\", event.task_id, event.error_code, event.error);\n        break;\n      case \"workflow.completed\":\n      case \"workflow.failed\":\n        // Run events: the top-level status is always \"completed\" (the envelope). The run's own\n        // outcome is result.status: completed | failed | cancelled.\n        console.log(`${event.event}:`, event.task_id, event.result?.status);\n        break;\n      default:\n        console.log(\"other event:\", event.event); // instance.*\n    }\n    res.writeHead(204).end();\n  } catch (e) {\n    if (e instanceof WebhookVerificationError) {\n      console.warn(\"rejected delivery:\", e.code);\n      res.writeHead(400).end();\n    } else {\n      res.writeHead(500).end();\n    }\n  }\n});\n\nserver.listen(8787);\n```"
+  },
+  {
+   "page": "sdk/typescript.md",
+   "title": "TypeScript SDK",
+   "heading": "5. Workflow run",
+   "anchor": "5-workflow-run",
+   "text": "`script-voiceover`: an LLM writes a short line from your brief, a TTS model speaks it. Each step is billed as an ordinary request. ([`examples/05-workflow-run.ts`](https://github.com/OpenGPU-Network/relaygpu-node/blob/main/examples/05-workflow-run.ts))\n\n```ts\nimport { Relay, TaskFailedError } from \"@relaygpu/client\";\n\nconst relay = new Relay({ apiKey: process.env.RELAY_API_KEY, baseUrl: process.env.RELAY_BASE_URL });\n\ntry {\n  // Inputs follow the template's input_schema: relay.workflows.get(\"script-voiceover\").\n  // Each step is billed as an ordinary request. Pass webhookUrl for one signed workflow.* delivery instead of waiting.\n  const run = await relay.workflows.run(\n    \"script-voiceover\",\n    { messages: [{ role: \"user\", content: process.argv[2] ?? \"a lighthouse at dusk\" }], voice: \"Cherry\" },\n    { wait: true, onProgress: (r) => console.log(r.status) },\n  );\n  console.log(\"run:\", run.run_id, run.status);\n  console.log(\"output:\", JSON.stringify(run.output, null, 2)); // the last step's output (the speech)\n} catch (e) {\n  // A failed or cancelled run throws; e.task is the run as polled.\n  if (e instanceof TaskFailedError) console.error(`run ${e.taskId} did not complete: ${e.message}`);\n  else throw e;\n  process.exitCode = 1;\n}\n```"
+  },
+  {
+   "page": "sdk/typescript.md",
+   "title": "TypeScript SDK",
+   "heading": "6. Chat: use the SDK you already have",
+   "anchor": "6-chat-use-the-sdk-you-already-have",
+   "text": "Chat and completions run on the official OpenAI and Anthropic SDKs: point them at Relay. This SDK does not wrap chat. ([`examples/06-chat-base-url.ts`](https://github.com/OpenGPU-Network/relaygpu-node/blob/main/examples/06-chat-base-url.ts))\n\n```ts\nimport OpenAI from \"openai\";\n\nconst base = process.env.RELAY_BASE_URL ?? \"https://relaygpu.com\";\nconst openai = new OpenAI({ apiKey: process.env.RELAY_API_KEY, baseURL: `${base}/v2/openai/v1` });\n\nconst completion = await openai.chat.completions.create({\n  model: \"openai/gpt-4o-mini\",\n  messages: [{ role: \"user\", content: \"Say hello in five words.\" }],\n  max_tokens: 20,\n});\nconsole.log(completion.choices[0].message.content);\n```"
+  },
+  {
+   "page": "sdk/typescript.md",
+   "title": "TypeScript SDK",
+   "heading": "Any model: `run()` and model resolution",
+   "anchor": "any-model-run-and-model-resolution",
+   "text": "```ts\nimport { Relay, isAccepted } from \"@relaygpu/client\";\n\nconst relay = new Relay({ apiKey: process.env.RELAY_API_KEY, baseUrl: process.env.RELAY_BASE_URL });\n\nconst out = await relay.run(\"Qwen/qwen-image\", { prompt: \"a lighthouse at dusk\" }); // the output body\nconst sub = await relay.run(\"KlingTeam/v3-T2V\", { prompt: \"waves\", duration: 3 }, { wait: false });\nif (isAccepted(sub)) console.log(sub.task_id); // the 202 envelope\n```\n\nThe SDK ships no model table. Every call resolves the model through `relay.models.get(name)`\n(`GET /v2/models/{name}`, cached 5 min per client): its route, whether `model` goes in the body, whether\nthe route is async by default, and its request/response schemas. A model added to Relay after this\nrelease works through `run()` and the family helpers (`image`, `video`, `audio`) without an upgrade; the\nmodels this release knows also get typed inputs and autocomplete.\n\n- An unknown name throws `ModelNotFoundError` (404); a retired one throws `ModelRetiredError` (403). Both\n  before anything is submitted or billed.\n- `relay.models.list({ tag: \"text-to-video\" })` lists the catalog; `relay.models.get(name)` returns one\n  model with its `request_schema`, `request_example` and `pricing`.\n- `run()` returns a sync route's body, or waits for an async route and returns the task's `result`.\n  `{ wait: false }` returns the `202` envelope instead."
+  },
+  {
+   "page": "sdk/typescript.md",
+   "title": "TypeScript SDK",
+   "heading": "Async tasks and `tasks.wait`",
+   "anchor": "async-tasks-and-taskswait",
+   "text": "Video (and any call with `async: true`) answers `202` with a `task_id`. `relay.video.generate` returns that\nenvelope unless you pass `{ wait: true }`; `run()` and the image/audio helpers wait by default.\n\n```ts\nconst task = await relay.tasks.wait(taskId, {\n  timeoutMs: 20 * 60_000,                       // the default; the task keeps running past it (APITimeoutError)\n  onProgress: (p) => console.log(p.status, p.elapsed_seconds),\n  signal: AbortSignal.timeout(30 * 60_000),\n});\n```\n\n`tasks.wait` long-polls `GET /v2/tasks/{id}?wait=30`: a 15 s task costs one or two requests, not a poll\nevery second. `onProgress` fires on status transitions (`queued` → `running` → `completed`) with\n`elapsed_seconds`, and that is all there is: no queue position, no logs and no cancel, by design. A failed\ntask throws `TaskFailedError` with `code` = the task's `error_code`. Task polls need no key: the task id is\nthe access token. A task's result expires 1 hour after it finishes.\n\nWorkflow runs have no long-poll: `workflows.waitRun` polls the run every 1 s, backing off to 5 s (default\nbudget 30 min)."
+  },
+  {
+   "page": "sdk/typescript.md",
+   "title": "TypeScript SDK",
+   "heading": "Idempotency and retries",
+   "anchor": "idempotency-and-retries",
+   "text": "Every async submit (`202` routes, `video.generate`, `run()` on an async route) and every workflow run is\nsent with an `Idempotency-Key`: yours (`{ idempotencyKey }`) or a generated UUID. That makes the submit\nsafe to retry, so the SDK retries it on a network error, a timeout or a 5xx (up to 2 times, same key).\nWhen the server recognises a key it has already accepted, it answers with the original `202` and the SDK\nreturns it with `replayed: true`: no second task, no second charge. The same key with a different body\nthrows `IdempotencyKeyReusedError` (422). Keys live 24 hours.\n\n```ts\nconst a = await relay.video.generate(\"KlingTeam/v3-T2V\", { prompt: \"waves\", duration: 3 }, { idempotencyKey: \"order-1234\" });\nconst b = await relay.video.generate(\"KlingTeam/v3-T2V\", { prompt: \"waves\", duration: 3 }, { idempotencyKey: \"order-1234\" });\n// b.task_id === a.task_id, b.replayed === true\n```\n\nSync calls (an image route answering `200`, chat, TTS) carry no key and are **never retried**: a retry\nwould run, and bill, the request again. GETs retry on 429/503 (honouring `Retry-After`, up to 3 times) and\non other 5xx (up to 2). `retry: false` turns every retry off."
+  },
+  {
+   "page": "sdk/typescript.md",
+   "title": "TypeScript SDK",
+   "heading": "Files and implicit uploads",
+   "anchor": "files-and-implicit-uploads",
+   "text": "```ts\nconst file = await relay.files.upload(blob, { retention: \"relay1d\", filename: \"dance.mp4\" }); // { file_id, url, expires_at, … }\nawait relay.files.copy(\"https://example.com/clip.mp4\", { retention: \"relay7d\" }); // Relay fetches it\nawait relay.files.get(file.file_id);\nawait relay.files.list({ source: \"upload\" });\nawait relay.files.delete(file.file_id); // the link goes down now; no refund\n```\n\n- Any `*_url` / `*_urls` input also takes a `Blob`, `Uint8Array`, `ArrayBuffer` or `ReadableStream`: the SDK\n  uploads it first and sends the link (quickstart 3). Implicit uploads use `relay1h` unless you pass\n  `{ upload: { retention: \"relay1d\" } }`.\n- `{ inlineImages: true }` sends images of 4 MB or less as base64 instead, on routes whose schema takes it;\n  larger ones are still uploaded.\n- One file is at most 100 MB (`FileTooLargeError`). The media type comes from `Blob.type`, else from the\n  file's first bytes.\n- `relay1h` is free within a daily quota; `relay1d`, `relay7d` and `relay30d` are billed per file at upload."
+  },
+  {
+   "page": "sdk/typescript.md",
+   "title": "TypeScript SDK",
+   "heading": "How long result links live",
+   "anchor": "how-long-result-links-live",
+   "text": "Result links (`urls`, `audio_url`, …) and uploaded files expire. By default a result link lives **1 hour**\nafter the task finishes. To keep outputs longer, buy storage per request with `storeOutput`:\n\n```ts\nawait relay.image.generate(\"Qwen/qwen-image\", { prompt: \"a lighthouse\" }, { storeOutput: \"relay7d\" });\n```\n\n| `storeOutput` / `retention` | Lifetime | Fee |\n|---|---|---|\n| `provider` (default) / `relay1h` | 1 hour | free |\n| `relay1d` | 1 day | per file |\n| `relay7d` | 7 days | per file |\n| `relay30d` | 30 days | per file |\n\nThe fees are in `(await relay.pricing.get()).media_storage`; read them there rather than hard-coding them."
+  },
+  {
+   "page": "sdk/typescript.md",
+   "title": "TypeScript SDK",
+   "heading": "Webhooks",
+   "anchor": "webhooks",
+   "text": "Pass `webhookUrl` on an async submit (one `task.completed` or `task.failed`) or on a workflow run (one\n`workflow.completed` or `workflow.failed`). Deliveries are signed with\n[Standard Webhooks](https://www.standardwebhooks.com/); `relay.webhooks.verify(rawBody, headers, secret)`\nchecks the signature and the timestamp (±5 min) and returns the typed event, discriminated on `event`\n(quickstart 4). It makes no request and needs no credential.\n\n- Verify the **raw** body bytes, not a re-serialised `JSON.parse` result.\n- Rotation: `relay.webhooks.rotateSecret()` issues a new secret and the previous one keeps working for\n  24 hours. During that window pass both: `verify(raw, headers, [current, previous])`.\n- On `workflow.*` events the top-level `status` is always `\"completed\"` (it describes the delivery). Branch\n  on `event`, or on `result.status` (`completed`, `failed`, `cancelled`; a cancelled run arrives as\n  `workflow.failed`).\n- Delivery is at-least-once: dedupe on the `webhook-id` header.\n- `relay.webhooks.secret()`, `.rotateSecret()` and `.deliveries.list()` / `.deliveries.get(taskIdOrRunId)`\n  need a JWT or a partner superkey."
+  },
+  {
+   "page": "sdk/typescript.md",
+   "title": "TypeScript SDK",
+   "heading": "Errors",
+   "anchor": "errors",
+   "text": "Every error extends `RelayError`. HTTP errors extend `RelayAPIError`; the HTTP status picks the class:\n\n| Status | Class |\n|---|---|\n| 400 | `InvalidRequestError` |\n| 401 | `AuthenticationError` |\n| 402 | `InsufficientCreditsError` |\n| 403 | `PermissionDeniedError` |\n| 404 | `NotFoundError` |\n| 409 | `ConflictError` |\n| 410 | `GoneError` |\n| 422 | `ValidationError` |\n| 429 | `RateLimitError` |\n| 500 | `RelayInternalError` |\n| 502 | `ProviderError` |\n| 503 | `CapacityError` |\n| 504 | `UpstreamTimeoutError` |\n\nThe `error.code` then picks a subclass: `KEY_BUDGET_EXHAUSTED` throws `KeyBudgetExhaustedError`, which is an\n`InsufficientCreditsError`; `CONTENT_POLICY_DECLINED` throws `ContentPolicyDeclinedError` (a\n`ValidationError`). Every code in Relay's error catalog has a class. A code this release does not know falls\nback to the status class and keeps `e.code`; `e.code` may also be `null`.\n\n```ts\nimport { KeyBudgetExhaustedError, RateLimitError, RelayAPIError } from \"@relaygpu/client\";\n\ntry {\n  await relay.image.generate(\"Qwen/qwen-image\", { prompt: \"a lighthouse\" });\n} catch (e) {\n  if (e instanceof KeyBudgetExhaustedError) console.error(\"this key's budget is spent\");\n  else if (e instanceof RateLimitError) console.error(`retry in ${e.retryAfter}s`);\n  else if (e instanceof RelayAPIError) console.error(e.status, e.code, e.requestId, e.detail);\n  else throw e;\n}\n```\n\n- `e.requestId` is the id to quote to support; `e.retryAfter` (seconds) is set from `Retry-After`;\n  `e.detail` is the server's detail.\n- `TaskFailedError`: an async task (or workflow run) ended `failed`; `e.code` is the task's `error_code`,\n  `e.taskId` and `e.task` carry the rest.\n- `APIConnectionError` (no HTTP answer), `APITimeoutError` (a `timeoutMs` ran out),\n  `WebhookVerificationError` (a delivery failed verification).\n- Branch on the class or `e.code`, never on the message, and never on `error.source` in the response body."
+  },
+  {
+   "page": "sdk/typescript.md",
+   "title": "TypeScript SDK",
+   "heading": "Account and keys",
+   "anchor": "account-and-keys",
+   "text": "```ts\nimport { Relay } from \"@relaygpu/client\";\n\nconst relay = new Relay({ jwt: dashboardJwt }); // or the superkey of a partner (custom) tier\n\nawait relay.account.credits();\nawait relay.account.usage();\nawait relay.account.usageTimeseries({ start_time: Math.floor(Date.now() / 1000) - 86_400 });\n\nconst { key } = await relay.keys.create({ name: \"end-user-42\", key_budget: 5 }); // the secret, shown ONCE\nfor await (const k of relay.keys.listAll()) console.log(k.key_id, k.name);\nawait relay.keys.topup(keyId, 2);\nawait relay.keys.revoke(keyId);\n```\n\nThese routes take a dashboard JWT or a custom-tier superkey. A plain inference key gets the server's 403\n(`PermissionDeniedError`); the SDK does not guess the key class. `keys.create` returns the full secret in\n`key` once; every later response masks it, so store it then. Address keys by `key_id`. `key_budget` is for\ncustom tiers only."
+  },
+  {
+   "page": "sdk/typescript.md",
+   "title": "TypeScript SDK",
+   "heading": "Cost estimates",
+   "anchor": "cost-estimates",
+   "text": "```ts\nconst est = await relay.estimateCost(\"KlingTeam/v3-T2V\", { duration_seconds: 3, quality_mode: \"std\" });\nconsole.log(est.usd, est.basis);\n```\n\n`estimateCost` computes from the public `/v2/pricing` rows. It is an **estimate, not an invoice**: you are\nbilled from provider-reported usage, and custom-tier prices are not in the public list."
+  },
+  {
+   "page": "sdk/typescript.md",
+   "title": "TypeScript SDK",
+   "heading": "Runtimes",
+   "anchor": "runtimes",
+   "text": "Node 18, 20 and 22 and Bun are tested in CI. Deno and Cloudflare Workers are supported by design (the\nclient uses only `fetch` and WebCrypto) and not yet in CI. ESM and CommonJS builds, types included, zero\nruntime dependencies. `relay.request(method, path, body)` reaches any route with the same errors and\nretry policy."
+  },
+  {
+   "page": "sdk/typescript.md",
+   "title": "TypeScript SDK",
+   "heading": "Chat",
+   "anchor": "chat",
+   "text": "Chat is a base-URL swap on the official SDKs, in any language:\n\n| SDK | Base URL |\n|---|---|\n| OpenAI | `https://relaygpu.com/v2/openai/v1` |\n| Anthropic | `https://relaygpu.com/v2/anthropic` |"
+  },
+  {
+   "page": "sdk/typescript.md",
+   "title": "TypeScript SDK",
+   "heading": "License",
+   "anchor": "license",
+   "text": "MIT"
+  }
+ ]
+}

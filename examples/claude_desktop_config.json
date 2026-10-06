@@ -1,0 +1,9 @@
+{
+  "mcpServers": {
+    "relay": {
+      "command": "npx",
+      "args": ["-y", "@relaygpu/mcp"],
+      "env": { "RELAY_API_KEY": "relay_sk_..." }
+    }
+  }
+}

@@ -1,0 +1,12 @@
+{
+  "inputs": [
+    { "type": "promptString", "id": "relay-key", "description": "Relay API key (relay_sk_...)", "password": true }
+  ],
+  "servers": {
+    "relay": {
+      "type": "http",
+      "url": "https://mcp.relaygpu.com/mcp",
+      "headers": { "X-API-Key": "${input:relay-key}" }
+    }
+  }
+}

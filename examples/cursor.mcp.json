@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "relay": {
+      "url": "https://mcp.relaygpu.com/mcp",
+      "headers": { "X-API-Key": "relay_sk_..." }
+    }
+  }
+}

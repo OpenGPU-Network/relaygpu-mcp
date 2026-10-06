@@ -1,0 +1,13 @@
+{
+  "inputs": [
+    { "type": "promptString", "id": "relay-key", "description": "Relay API key (relay_sk_...)", "password": true }
+  ],
+  "servers": {
+    "relay": {
+      "type": "stdio",
+      "command": "npx",
+      "args": ["-y", "@relaygpu/mcp"],
+      "env": { "RELAY_API_KEY": "${input:relay-key}" }
+    }
+  }
+}

@@ -1,0 +1,46 @@
+{
+  "name": "@relaygpu/mcp",
+  "version": "0.1.0",
+  "description": "Relay's MCP server: run any Relay model, poll tasks, upload files, run workflows and search the docs from Claude Code, Cursor, VS Code and Claude Desktop.",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/OpenGPU-Network/relaygpu-mcp.git"
+  },
+  "homepage": "https://relaygpu.com",
+  "type": "module",
+  "engines": {
+    "node": ">=18"
+  },
+  "bin": {
+    "relaygpu-mcp": "dist/stdio.js"
+  },
+  "main": "./dist/server.js",
+  "types": "./dist/server.d.ts",
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsup",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run --dir test/unit",
+    "test:e2e": "npm run build && vitest run --config vitest.e2e.config.ts",
+    "build:docs": "node scripts/build-docs-index.mjs",
+    "start": "node dist/http.js",
+    "prepack": "npm run build"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "1.32.1",
+    "@relaygpu/client": "^0.1.0",
+    "zod": "^3.25.76"
+  },
+  "devDependencies": {
+    "@types/node": "^18.19.130",
+    "tsup": "^8.5.1",
+    "typescript": "^5.9.3",
+    "vitest": "^2.1.9"
+  }
+}

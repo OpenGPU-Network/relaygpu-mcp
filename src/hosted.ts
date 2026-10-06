@@ -9,6 +9,7 @@ import type { Credential } from "./context.js";
 import { createRelayMcpServer, SERVER_INSTRUCTIONS, SERVER_NAME } from "./server.js";
 import { renderMetrics } from "./metrics.js";
 import { log } from "./log.js";
+import { MAX_BASE64_BYTES } from "./tools/files.js";
 import { VERSION } from "./version.js";
 
 export interface HostedOptions {
@@ -19,7 +20,8 @@ export interface HostedOptions {
   fetch?: typeof fetch;
 }
 
-const BODY_MAX = 8 * 1024 * 1024; // a 4 MB base64 upload argument is ~5.4 MB of JSON
+// The largest upload_file base64 argument, encoded, plus 1 MB of JSON-RPC headroom.
+const BODY_MAX = Math.ceil((MAX_BASE64_BYTES * 4) / 3) + 1024 * 1024;
 const CORS_HEADERS = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Methods": "GET, POST, DELETE, OPTIONS",
@@ -51,7 +53,7 @@ export async function listTools(opts: { baseUrl?: string; fetch?: typeof fetch }
   }
 }
 
-export function serverCard(tools: Tool[]) {
+function serverCard(tools: Tool[]) {
   return {
     name: SERVER_NAME,
     title: "Relay",
@@ -74,6 +76,8 @@ export function serverCard(tools: Tool[]) {
 function send(res: ServerResponse, status: number, body: string, type: string) {
   res.writeHead(status, { "Content-Type": type, ...CORS_HEADERS }).end(body);
 }
+
+const sendJson = (res: ServerResponse, status: number, body: string) => send(res, status, body, "application/json");
 
 function readJson(req: IncomingMessage): Promise<unknown> {
   return new Promise((resolve, reject) => {
@@ -102,14 +106,14 @@ const rpcError = (code: number, message: string) => JSON.stringify({ jsonrpc: "2
 async function handleMcp(req: IncomingMessage, res: ServerResponse, opts: HostedOptions) {
   if (req.method !== "POST") {
     // Stateless: no standalone SSE stream and no session to delete.
-    return send(res, 405, rpcError(-32000, "Method not allowed: this server is stateless, POST only."), "application/json");
+    return sendJson(res, 405, rpcError(-32000, "Method not allowed: this server is stateless, POST only."));
   }
   let body: unknown;
   try {
     body = await readJson(req);
   } catch (e) {
     const status = (e as { status?: number }).status ?? 400;
-    return send(res, status, rpcError(-32700, (e as Error).message), "application/json");
+    return sendJson(res, status, rpcError(-32700, (e as Error).message));
   }
   const server = createRelayMcpServer({ transport: "http", credential: credentialFromHeaders(req.headers), baseUrl: opts.baseUrl, fetch: opts.fetch });
   const transport = new StreamableHTTPServerTransport({ sessionIdGenerator: undefined });
@@ -129,14 +133,14 @@ export async function startHostedServer(opts: HostedOptions): Promise<{ server: 
     try {
       if (req.method === "OPTIONS") return void res.writeHead(204, CORS_HEADERS).end();
       if (path === "/mcp") return await handleMcp(req, res, opts);
-      if (req.method !== "GET") return send(res, 405, '{"error":"method not allowed"}', "application/json");
-      if (path === "/healthz") return send(res, 200, JSON.stringify({ status: "ok", version: VERSION }), "application/json");
+      if (req.method !== "GET") return sendJson(res, 405, '{"error":"method not allowed"}');
+      if (path === "/healthz") return sendJson(res, 200, JSON.stringify({ status: "ok", version: VERSION }));
       if (path === "/metrics") return send(res, 200, renderMetrics(), "text/plain; version=0.0.4");
-      if (path === "/.well-known/mcp/server-card.json") return send(res, 200, card, "application/json");
-      send(res, 404, '{"error":"not found"}', "application/json");
+      if (path === "/.well-known/mcp/server-card.json") return sendJson(res, 200, card);
+      sendJson(res, 404, '{"error":"not found"}');
     } catch (e) {
       log("error", "http_request_failed", { path, error: e instanceof Error ? e.name : "unknown" });
-      if (!res.headersSent) send(res, 500, rpcError(-32603, "Internal server error"), "application/json");
+      if (!res.headersSent) sendJson(res, 500, rpcError(-32603, "Internal server error"));
     }
   });
   // A 45 s run_model must never be cut: request timeout well past it, keep-alive above common proxy idles.

@@ -2,9 +2,9 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { Relay } from "@relaygpu/client";
 import type { ToolContext } from "../../src/context.js";
 import { missingCredential } from "../../src/errors.js";
-import { EXPIRY_NOTE, decodeMedia, formatResult, retentionFor, sniffMedia } from "../../src/media.js";
+import { EXPIRY_NOTE, decodeMedia, formatResult, sniffMedia } from "../../src/media.js";
 import { apiError, mockFetch, TEST_BASE, type Route } from "../helpers/harness.js";
-import { b64, fileResponse, imagesOf, jsonOf, notesOf, pngBytes, wavBytes } from "../fixtures/relay.js";
+import { b64, fileResponse, pngBytes, wavBytes } from "../fixtures/relay.js";
 
 function ctxFor(routes: Route[], opts: { credential?: boolean; transport?: "stdio" | "http" } = {}) {
   const m = mockFetch(routes);
@@ -13,6 +13,7 @@ function ctxFor(routes: Route[], opts: { credential?: boolean; transport?: "stdi
     transport: opts.transport ?? "stdio",
     catalog: new Relay({ baseUrl: TEST_BASE, fetch: m.fetch }),
     signal: new AbortController().signal,
+    hasCredential: opts.credential !== false,
     client() {
       if (opts.credential === false) throw missingCredential();
       return client;
@@ -36,9 +37,10 @@ describe("media formatting (F5)", () => {
     expect(decodeMedia(b64(new TextEncoder().encode("x".repeat(400))))).toBeNull(); // base64 text, not media
     expect(decodeMedia(b64(pngBytes(100)))).toBeNull(); // bare base64 under 200 chars is left alone
     expect(decodeMedia(`data:image/png;base64,${b64(pngBytes(20))}`)?.type).toBe("image/png"); // data: URI at any size
-    expect(retentionFor(undefined)).toBe("relay1h");
-    expect(retentionFor("provider")).toBe("relay1h");
-    expect(retentionFor("relay30d")).toBe("relay30d");
+    const head = (s: string) => Uint8Array.from(Buffer.from(s.padEnd(16, "\0"), "latin1"));
+    expect(sniffMedia(head("\0\0\0\x14ftypqt  "))).toBe("video/quicktime");
+    expect(sniffMedia(head("\0\0\0\x18ftypisom"))).toBe("video/mp4");
+    expect(sniffMedia(head("\x1a\x45\xdf\xa3"))).toBe("video/webm");
   });
 
   it("A4 nested data URIs and bare base64 audio are re-hosted once each; large non-media strings stay intact", async () => {
@@ -46,18 +48,29 @@ describe("media formatting (F5)", () => {
     const wav = b64(wavBytes(400));
     const longText = "lorem ipsum ".repeat(100);
     const uri = `data:image/png;base64,${b64(pngBytes(50))}`;
-    const r = await formatResult({ output: { audio: wav, frames: [uri, uri] }, text: longText, poll_url: "https://relay.test/v2/tasks/x" }, { ctx });
+    const input = { output: { audio: wav, frames: [uri, uri] }, text: longText, poll_url: "https://relay.test/v2/tasks/x" };
+    const r = await formatResult(input, { ctx });
     const posts = calls.filter((c) => c.path === "/v2/files");
     expect(posts).toHaveLength(2);
     expect(posts.map((c) => c.headers.get("content-type")).sort()).toEqual(["audio/wav", "image/png"]);
-    const body = jsonOf(r);
+    const body = r.output as typeof input;
     expect(body.text).toBe(longText);
     expect(body.output.audio).toBe(fileResponse().url);
     expect(body.output.frames).toEqual([fileResponse().url, fileResponse().url]);
-    expect(body.rehosted).toHaveLength(2);
-    expect(notesOf(r)).not.toContain("poll_url");
-    expect(notesOf(r)).not.toContain("Result links"); // poll_url is never a result link
+    expect(r.rehosted).toHaveLength(2);
+    expect(input.output.audio).toBe(wav); // the caller's body is never mutated
+    expect(r.notes.join("\n")).not.toContain("poll_url");
+    expect(r.notes.join("\n")).not.toContain("Result links"); // poll_url is never a result link
     expect(JSON.stringify(r)).not.toContain(wav.slice(0, 40));
+  });
+
+  it("F5 an output without media comes back as the same object (no copy)", async () => {
+    const { ctx, calls } = ctxFor([filesOk]);
+    const body = { data: [{ url: "https://cdn.test/a.png" }], text: "lorem ipsum ".repeat(50) };
+    const r = await formatResult(body, { ctx });
+    expect(r.output).toBe(body);
+    expect(r.rehosted).toEqual([]);
+    expect(calls).toHaveLength(0);
   });
 
   it("A4 without a credential the base64 is omitted with a note naming the credential (zero POSTs)", async () => {
@@ -65,8 +78,8 @@ describe("media formatting (F5)", () => {
     const png = b64(pngBytes(600));
     const r = await formatResult({ data: [{ b64_json: png }] }, { ctx });
     expect(calls).toHaveLength(0);
-    expect(jsonOf(r).data[0].b64_json).toBe("<base64 omitted: 600 bytes>");
-    expect(notesOf(r)).toContain("X-API-Key");
+    expect((r.output as any).data[0].b64_json).toBe("<base64 omitted: 600 bytes>");
+    expect(r.notes.join("\n")).toContain("X-API-Key");
     expect(JSON.stringify(r)).not.toContain(png.slice(0, 40));
   });
 
@@ -74,24 +87,22 @@ describe("media formatting (F5)", () => {
     const { ctx } = ctxFor([{ method: "POST", path: "/v2/files", reply: apiError(429, "FILE_QUOTA_EXCEEDED", "Daily free upload quota reached") }]);
     const png = b64(pngBytes(600));
     const r = await formatResult({ data: [{ b64_json: png }] }, { ctx });
-    expect(r.isError).toBeFalsy();
-    expect(jsonOf(r).data[0].b64_json).toBe("<base64 omitted: 600 bytes; re-host failed>");
-    expect(notesOf(r)).toContain("code: FILE_QUOTA_EXCEEDED");
+    expect((r.output as any).data[0].b64_json).toBe("<base64 omitted: 600 bytes; re-host failed>");
+    expect(r.rehosted).toEqual([]);
+    expect(r.notes.join("\n")).toContain("code: FILE_QUOTA_EXCEEDED");
     expect(JSON.stringify(r)).not.toContain(png.slice(0, 40));
   });
 
   it("F5 URL expiry wording per store_output", async () => {
     const { ctx } = ctxFor([]);
     const u = "https://cdn.test/a.mp4";
-    expect(notesOf(await formatResult({ video_url: u }, { ctx }))).toContain(`${u}: ${EXPIRY_NOTE}`);
-    expect(notesOf(await formatResult({ video_url: u }, { ctx, storeOutput: "provider", storeOutputApplied: true }))).toContain(`${u}: ${EXPIRY_NOTE}`);
-    expect(notesOf(await formatResult({ video_url: u }, { ctx, storeOutput: "relay30d", storeOutputApplied: true }))).toContain(
-      `${u}: stored as relay30d: kept for 30 days`,
-    );
-    expect(notesOf(await formatResult({ video_url: u }, { ctx, storeOutput: "relay90d", storeOutputApplied: true }))).toContain("kept per relay90d");
-    const notes = await formatResult({ video_url: u }, { ctx, storeOutput: "relay1d", storeOutputApplied: false, notes: ["task_id: t"] });
-    expect(notesOf(notes).startsWith("task_id: t")).toBe(true); // caller notes first
-    expect(notesOf(notes)).toContain("store_output is not supported by this model; the link expires 1 h after completion");
+    const notes = async (o: Omit<Parameters<typeof formatResult>[1], "ctx">) => (await formatResult({ video_url: u }, { ctx, ...o })).notes.join("\n");
+    expect(await notes({})).toContain(`${u}: ${EXPIRY_NOTE}`);
+    expect(await notes({ store: "none" })).toContain(`${u}: ${EXPIRY_NOTE}`);
+    expect(await notes({ store: "applied", sku: "relay30d" })).toContain(`${u}: stored as relay30d (see get_pricing media_storage for its lifetime)`);
+    const unsupported = await notes({ store: "unsupported", sku: "relay1d" });
+    expect(unsupported).toContain(`${u}: expires 1 h after completion`);
+    expect(unsupported).toContain("store_output is not supported by this model; the link expires 1 h after completion");
   });
 
   it("A4 inline_images fetches a ≤1MB URL image into an image block; >1MB never", async () => {
@@ -104,10 +115,9 @@ describe("media formatting (F5)", () => {
     });
     const { ctx } = ctxFor([]);
     const r = await formatResult({ data: [{ url: "https://cdn.test/small.png" }, { url: "https://cdn.test/big.png" }] }, { ctx, inlineImages: true });
-    const imgs = imagesOf(r);
-    expect(imgs).toHaveLength(1);
-    expect(imgs[0].data).toBe(b64(small));
-    expect(notesOf(r)).toContain("https://cdn.test/big.png: image > 1 MB not inlined");
+    expect(r.images).toHaveLength(1);
+    expect(r.images[0].data).toBe(b64(small));
+    expect(r.notes.join("\n")).toContain("https://cdn.test/big.png: image > 1 MB not inlined");
     expect(fetched).toHaveLength(2);
   });
 
@@ -118,7 +128,7 @@ describe("media formatting (F5)", () => {
     const links = ["http://cdn.test/a.png", "https://10.0.34.27/a.png", "https://169.254.169.254/x", "https://localhost/a.png", "https://svc.internal/a.png", "https://[::1]/a.png"];
     const r = await formatResult({ links }, { ctx, inlineImages: true });
     expect(spy).not.toHaveBeenCalled();
-    expect(imagesOf(r)).toHaveLength(0);
+    expect(r.images).toHaveLength(0);
   });
 
   it("A4 without inline_images no URL is fetched", async () => {
@@ -127,6 +137,6 @@ describe("media formatting (F5)", () => {
     const { ctx } = ctxFor([]);
     const r = await formatResult({ data: [{ url: "https://cdn.test/small.png" }] }, { ctx });
     expect(spy).not.toHaveBeenCalled();
-    expect(imagesOf(r)).toHaveLength(0);
+    expect(r.images).toHaveLength(0);
   });
 });

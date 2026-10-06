@@ -1,11 +1,11 @@
 import { describe, expect, it } from "vitest";
-import { runTools } from "../../src/tools/run.js";
+import { DO_NOT_RESUBMIT, STILL_RUNNING, runTools } from "../../src/tools/run.js";
 import { EXPIRY_NOTE } from "../../src/media.js";
-import { apiError, connect, mockFetch, textOf, type RecordedCall, type Route } from "../helpers/harness.js";
+import { apiError, connect, mockFetch, posts, textOf, type Route } from "../helpers/harness.js";
 import { GPT_IMAGE, KLING, QWEN, b64, fileResponse, imagesOf, jsonOf, modelDetail, modelPath, notesOf, pngBytes } from "../fixtures/relay.js";
 
 const TASK = "direct:7b1e2c4a-0000-4000-8000-000000000001";
-const SENTENCE = "Do not resubmit: call check_task with this task_id";
+const SENTENCE = DO_NOT_RESUBMIT;
 const QWEN_ROUTE = "/v2/image/qwen/generate";
 const KLING_ROUTE = "/v2/video/kling-3/t2v";
 const GPT_ROUTE = "/v2/image/gpt-image-2/generate";
@@ -28,8 +28,6 @@ const accepted: Route = {
   reply: { status: 202, json: { task_id: TASK, status: "queued", poll_url: `/v2/tasks/${TASK}`, message: "queued" } },
 };
 const taskRoute = (json: Record<string, unknown>): Route => ({ method: "GET", path: /^\/v2\/tasks\//, reply: { json: { elapsed_seconds: 3, ...json } } });
-
-const posts = (calls: RecordedCall[], path?: string) => calls.filter((c) => c.method === "POST" && (!path || c.path === path));
 
 describe("run_model (F4, F5)", () => {
   it("A3 unknown model fails before submit (zero POSTs)", async () => {
@@ -61,7 +59,10 @@ describe("run_model (F4, F5)", () => {
     const s = await connect({ fetch: m.fetch, tools: runTools });
     const r = await s.call("run_model", { model: QWEN, input: { prompt: "a cat" } });
     expect(r.isError).toBeFalsy();
-    expect(jsonOf(r).data[0].url).toBe(IMG_URL);
+    const body = jsonOf(r);
+    expect(body.status).toBe("completed");
+    expect(body.task_id).toBeUndefined(); // a sync answer has no task
+    expect(body.output.data[0].url).toBe(IMG_URL);
     expect(notesOf(r)).toContain(`${IMG_URL}: ${EXPIRY_NOTE}`);
     const post = posts(m.calls, QWEN_ROUTE)[0];
     expect(post.body).toMatchObject({ prompt: "a cat", model: QWEN });
@@ -74,9 +75,11 @@ describe("run_model (F4, F5)", () => {
     const s = await connect({ fetch: m.fetch, tools: runTools });
     const r = await s.call("run_model", { model: KLING, input: { prompt: "a wave", duration: 3 }, wait_seconds: 1 });
     expect(r.isError).toBeFalsy();
+    expect(SENTENCE).toBe("Do not resubmit: call check_task with this task_id"); // locked text
     expect(textOf(r)).toContain(SENTENCE);
     const body = jsonOf(r);
-    expect(body).toMatchObject({ task_id: TASK, poll_url: `/v2/tasks/${TASK}`, status: "running", replayed: false });
+    expect(body).toMatchObject({ task_id: TASK, poll_url: `/v2/tasks/${TASK}`, status: "running", replayed: false, elapsed_seconds: 3 });
+    expect(body.next).toEqual({ tool: "check_task", args: { task_id: TASK } });
     expect(posts(m.calls)).toHaveLength(1);
     expect(posts(m.calls)[0].headers.get("idempotency-key")).toBeTruthy(); // the SDK's auto key
     await s.close();
@@ -99,8 +102,7 @@ describe("run_model (F4, F5)", () => {
     const s = await connect({ fetch: m.fetch, tools: runTools });
     const r = await s.call("run_model", { model: KLING, input: { prompt: "a wave" }, wait_seconds: 5 });
     expect(r.isError).toBeFalsy();
-    expect(jsonOf(r)).toEqual({ video_url: video });
-    expect(notesOf(r)).toContain(TASK);
+    expect(jsonOf(r)).toEqual({ status: "completed", task_id: TASK, output: { video_url: video } });
     expect(notesOf(r)).toContain(video);
     expect(posts(m.calls)).toHaveLength(1);
     await s.close();
@@ -155,7 +157,8 @@ describe("run_model (F4, F5)", () => {
     expect(upload.headers.get("content-type")).toBe("image/png");
     expect(upload.query.get("retention")).toBe("relay1h");
     const body = jsonOf(r);
-    expect(body.data[0].b64_json).toBe(fileResponse().url);
+    expect(body.output.data[0].b64_json).toBe(fileResponse().url);
+    expect(body.output.rehosted).toBeUndefined(); // never spread into the output
     expect(body.rehosted).toEqual([{ url: fileResponse().url, file_id: "file_abc123", expires_at: fileResponse().expires_at, retention: "relay1h" }]);
     const all = JSON.stringify(r);
     expect(all).not.toContain(pngB64.slice(0, 40));
@@ -194,7 +197,7 @@ describe("run_model (F4, F5)", () => {
     const s = await connect({ fetch: m.fetch, tools: runTools });
     const r = await s.call("run_model", { model: QWEN, input: { prompt: "a cat" }, store_output: "relay7d" });
     expect((posts(m.calls, QWEN_ROUTE)[0].body as Record<string, unknown>).store_output).toBe("relay7d");
-    expect(notesOf(r)).toContain(`${IMG_URL}: stored as relay7d: kept for 7 days`);
+    expect(notesOf(r)).toContain(`${IMG_URL}: stored as relay7d (see get_pricing media_storage for its lifetime)`);
     await s.close();
   });
 
@@ -229,9 +232,11 @@ describe("check_task (F3)", () => {
     const s = await connect({ fetch: m.fetch, tools: runTools, credential: null });
     const r = await s.call("check_task", { task_id: TASK, wait_seconds: 5 });
     expect(r.isError).toBeFalsy();
-    expect(jsonOf(r).video_url).toBe("https://cdn.provider.test/v.mp4");
+    const body = jsonOf(r);
+    expect(body.output.video_url).toBe("https://cdn.provider.test/v.mp4");
     expect(notesOf(r)).toContain(EXPIRY_NOTE);
-    expect(notesOf(r)).toContain("status: completed"); // a polling agent reads the terminal state from the answer
+    expect(body).toMatchObject({ status: "completed", task_id: TASK }); // a polling agent reads the terminal state from the answer
+    expect(body.next).toBeUndefined();
     expect(m.calls[0].query.get("wait")).toBe("5");
     expect(m.calls[0].headers.get("x-api-key")).toBeNull();
     await s.close();
@@ -242,8 +247,9 @@ describe("check_task (F3)", () => {
     const s = await connect({ fetch: m.fetch, tools: runTools });
     const r = await s.call("check_task", { task_id: TASK, wait_seconds: 1 });
     expect(r.isError).toBeFalsy();
-    expect(jsonOf(r)).toMatchObject({ task_id: TASK, status: "running" });
-    expect(textOf(r)).toContain("Still running: call check_task again with this task_id; do not resubmit.");
+    expect(jsonOf(r)).toMatchObject({ task_id: TASK, status: "running", next: { tool: "check_task", args: { task_id: TASK } } });
+    expect(STILL_RUNNING).toBe("Still running: call check_task again with this task_id; do not resubmit.");
+    expect(textOf(r)).toContain(STILL_RUNNING);
     await s.close();
   });
 

@@ -1,6 +1,6 @@
 // JSON lines on stderr only: on stdio, stdout is the protocol and a stray write breaks the client.
 const LEVELS = { debug: 10, info: 20, warning: 30, error: 40 } as const;
-export type Level = keyof typeof LEVELS;
+type Level = keyof typeof LEVELS;
 
 function threshold(): number {
   const raw = (process.env.LOG_LEVEL ?? "warning").toLowerCase();

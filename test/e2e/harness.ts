@@ -8,6 +8,12 @@ import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js"
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
 import { LATEST_PROTOCOL_VERSION, type CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 import { startHostedServer } from "../../src/hosted.js";
+import { EXPIRY_NOTE } from "../../src/media.js";
+import { DO_NOT_RESUBMIT } from "../../src/tools/run.js";
+import { textOf } from "../helpers/harness.js";
+
+export { EXPIRY_NOTE, textOf };
+export const RESUBMIT_NOTE = DO_NOT_RESUBMIT;
 
 export const ROOT = fileURLToPath(new URL("../../", import.meta.url));
 export const STDIO_BIN = fileURLToPath(new URL("../../dist/stdio.js", import.meta.url));
@@ -27,8 +33,6 @@ export const TOOL_NAMES = [
 
 /** Inputs pinned against the staging catalog (GET /v2/models/{model} request_schema, 2026-10-06). */
 export const QWEN = { model: "Qwen/qwen-image", input: { prompt: "a red fox", size: "512x512" } };
-export const EXPIRY_NOTE = "expires 1 h after completion unless store_output was set";
-export const RESUBMIT_NOTE = "Do not resubmit: call check_task with this task_id";
 
 /** A long tool call (run_model waits up to 45 s) must outlive the SDK's 60 s default request timeout. */
 const CALL_OPTS = { timeout: 180_000 };
@@ -173,13 +177,6 @@ export async function hostedChild(env: Record<string, string>) {
   };
 }
 
-/** All text blocks of a result, joined. */
-export const textOf = (r: CallToolResult) =>
-  r.content
-    .filter((c): c is { type: "text"; text: string } => c.type === "text")
-    .map((c) => c.text)
-    .join("\n");
-
 function deepFind(v: unknown, key: string): unknown {
   if (!v || typeof v !== "object") return undefined;
   if (!Array.isArray(v) && key in v) return (v as Record<string, unknown>)[key];
@@ -190,7 +187,7 @@ function deepFind(v: unknown, key: string): unknown {
   return undefined;
 }
 
-/** A field from a tool answer: the first JSON text block that carries it, else a `key: value` / `"key": "value"` match. */
+/** A field from a tool answer (the envelope's top-level `status` / `task_id` / `run_id` first), else a `key: value` match. */
 export function fieldOf(r: CallToolResult, key: string): string | undefined {
   for (const c of r.content) {
     if (c.type !== "text") continue;

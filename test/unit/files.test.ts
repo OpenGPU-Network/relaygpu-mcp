@@ -3,7 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { filesTools, HOSTED_PATH_REFUSAL } from "../../src/tools/files.js";
-import { connect, mockFetch, textOf, type Route } from "../helpers/harness.js";
+import { connect, mockFetch, posts, textOf, type Route } from "../helpers/harness.js";
 import { b64, fileResponse, jsonOf, notesOf, pngBytes, wavBytes } from "../fixtures/relay.js";
 
 const filesOk: Route = {
@@ -11,7 +11,6 @@ const filesOk: Route = {
   path: "/v2/files",
   reply: (c) => ({ status: 201, json: fileResponse({ retention: c.query.get("retention") ?? (c.body as { retention?: string })?.retention ?? "relay1h" }) }),
 };
-const posts = (calls: { method: string }[]) => calls.filter((c) => c.method === "POST");
 
 let dir: string;
 let wavPath: string;
@@ -147,6 +146,8 @@ describe("upload_file (F6)", () => {
       const r = await s.call("upload_file", { path: p });
       expect(r.isError).toBe(true);
       expect(JSON.stringify(r)).toContain("100 MB");
+      expect(textOf(r)).toContain("FileTooLargeError");
+      expect(textOf(r)).toContain("code: FILE_TOO_LARGE");
       expect(m.calls).toHaveLength(0);
       await s.close();
     } finally {

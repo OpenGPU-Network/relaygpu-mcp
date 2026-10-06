@@ -83,3 +83,6 @@ export const apiError = (status: number, code: string, message: string, requestI
   json: { detail: message, error: { code, message, request_id: requestId } },
   headers: { "x-request-id": requestId },
 });
+
+/** The recorded POSTs, optionally to one path. */
+export const posts = (calls: RecordedCall[], path?: string) => calls.filter((c) => c.method === "POST" && (!path || c.path === path));

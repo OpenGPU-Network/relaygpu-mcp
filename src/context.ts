@@ -15,6 +15,8 @@ export interface ToolContext {
   transport: TransportKind;
   /** The shared keyless client: catalog reads (`models`, `pricing`), task and run polls. Never carries a credential. */
   catalog: Relay;
+  /** True when the connection carries a credential (`client()` will not throw). */
+  hasCredential: boolean;
   /**
    * The caller's client for billed and account calls. Its `models`/`pricing` are the shared catalog's (one model
    * cache per base URL, never per key). Throws `MissingCredentialsError` when the connection carries no credential.
@@ -26,11 +28,14 @@ export interface ToolContext {
 
 export interface ToolDef<S extends ZodRawShape = ZodRawShape> {
   name: string;
+  /** Also the annotations title (the server adds it). */
   title: string;
   description: string;
   /** zod raw shape; every field carries `.describe()`. */
   inputSchema: S;
-  annotations?: ToolAnnotations;
+  annotations?: Omit<ToolAnnotations, "title">;
+  /** Needs a credential: the server refuses it without one before the handler runs (zero requests). */
+  billed?: boolean;
   handler(args: z.objectOutputType<S, z.ZodTypeAny>, ctx: ToolContext): Promise<CallToolResult>;
 }
 
@@ -39,13 +44,21 @@ export function defineTool<S extends ZodRawShape>(tool: ToolDef<S>): ToolDef {
   return tool as unknown as ToolDef;
 }
 
-/** A tool answer: pretty JSON, optionally preceded by plain-text notes (expiry, next step). */
+const PRETTY_MAX = 4 * 1024;
+
+/** A tool answer: JSON (pretty under 4 KB, compact above), optionally preceded by plain-text notes (expiry, next step). */
 export function jsonResult(value: unknown, notes: string[] = []): CallToolResult {
   const content: CallToolResult["content"] = notes.map((text) => ({ type: "text" as const, text }));
-  content.push({ type: "text", text: JSON.stringify(value, null, 2) });
+  const compact = JSON.stringify(value) ?? "null";
+  content.push({ type: "text", text: compact.length < PRETTY_MAX ? JSON.stringify(value, null, 2) : compact });
   return { content };
 }
 
 export function textResult(text: string): CallToolResult {
   return { content: [{ type: "text", text }] };
+}
+
+/** A plain tool error (a local refusal; SDK errors go through the mapper in errors.ts). */
+export function errorResult(text: string): CallToolResult {
+  return { ...textResult(text), isError: true };
 }

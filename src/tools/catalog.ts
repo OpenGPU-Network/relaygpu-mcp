@@ -23,7 +23,7 @@ const search_models = defineTool({
       .optional()
       .describe("Words to match, case-insensitive; every word must appear in the name, display name or tag (e.g. 'kling v3')."),
   },
-  annotations: { title: "Search Relay models", ...READ_ONLY },
+  annotations: READ_ONLY,
   async handler({ tag, query }, ctx) {
     const rows = await ctx.catalog.models.list({ tag: tag || undefined, signal: ctx.signal });
     const words = (query ?? "").toLowerCase().split(/\s+/).filter(Boolean);
@@ -59,7 +59,7 @@ const get_model = defineTool({
   inputSchema: {
     model: z.string().describe("Exact model name from search_models, e.g. Qwen/qwen-image."),
   },
-  annotations: { title: "Get a Relay model", ...READ_ONLY },
+  annotations: READ_ONLY,
   async handler({ model }, ctx) {
     const d = await ctx.catalog.models.get(model);
     const notes =
@@ -95,7 +95,7 @@ const get_pricing = defineTool({
   inputSchema: {
     model: z.string().optional().describe("Model name (e.g. Qwen/qwen-image) to keep only its rows. Omit for every model."),
   },
-  annotations: { title: "Get Relay pricing", ...READ_ONLY },
+  annotations: READ_ONLY,
   async handler({ model }, ctx) {
     const p = await ctx.catalog.pricing.get({ signal: ctx.signal });
     const rows = model ? p.pricing.filter((r) => rowModel(r.model) === model || r.model === model) : p.pricing;
@@ -148,7 +148,7 @@ const estimate_cost = defineTool({
     model: z.string().describe("Exact model name, e.g. KlingTeam/v3-T2V."),
     usage: usageSchema.describe("What the call uses; only the fields of the model's billing type matter."),
   },
-  annotations: { title: "Estimate a Relay cost", ...READ_ONLY },
+  annotations: READ_ONLY,
   async handler({ model, usage }, ctx) {
     const est = await ctx.catalog.estimateCost(model, usage as UsageInput);
     return jsonResult({ model, usd: est.usd, basis: est.basis }, ["Estimate only, not an invoice. Next: run_model to run it."]);

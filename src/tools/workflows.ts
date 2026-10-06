@@ -1,70 +1,40 @@
 // Workflow tools: list (public), run (one submit + bounded wait), check (keyless poll), cancel.
 import { z } from "zod";
-import { APITimeoutError, TaskFailedError, type Relay, type WorkflowRunState } from "@relaygpu/client";
+import type { Relay, WorkflowRunState } from "@relaygpu/client";
 import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 import { defineTool, jsonResult, type ToolContext, type ToolDef } from "../context.js";
-import { formatResult } from "../media.js";
+import { CHECK_WAIT_MAX_S, RUN_WAIT_MAX_S, asyncAnswer, doNotResubmit, failedError, stillRunning, waitOrCurrent, waitSecondsArg } from "./pending.js";
 
-export const RUN_WAIT_MAX_S = 45;
-export const CHECK_WAIT_MAX_S = 30;
-export const DO_NOT_RESUBMIT = "Do not resubmit: call check_workflow_run with this run_id";
-export const STILL_RUNNING = "Still running: call check_workflow_run again; do not resubmit.";
+export const DO_NOT_RESUBMIT = doNotResubmit("check_workflow_run");
+export const STILL_RUNNING = stillRunning("check_workflow_run");
+
+const REPLAYED_NOTE = "This submit replayed an earlier one with the same idempotency_key: same run, nothing billed again.";
 
 const runIdField = z.string().min(1).describe("The run id returned by run_workflow (`wf:…`).");
 
-/** The run without bulky step outputs: what a caller needs to decide the next step. */
-function runSummary(run: WorkflowRunState) {
-  return {
-    run_id: run.run_id,
-    workflow_id: run.workflow_id,
-    status: run.status,
-    steps: run.steps.map((s) => ({
-      step_id: s.step_id,
-      model: s.model,
-      status: s.status,
-      ...(s.task_id ? { task_id: s.task_id } : {}),
-      ...(s.cost_usd != null ? { cost_usd: s.cost_usd } : {}),
-      ...(s.error ? { error: s.error } : {}),
-    })),
-    ...(run.total_cost_usd != null ? { total_cost_usd: run.total_cost_usd } : {}),
-    ...(run.error ? { error: run.error } : {}),
-  };
-}
+/** The steps without bulky outputs: what a caller needs to decide the next step. */
+const stepsOf = (run: WorkflowRunState) =>
+  run.steps.map((s) => ({ step_id: s.step_id, model: s.model, status: s.status, task_id: s.task_id || undefined, cost_usd: s.cost_usd ?? undefined, error: s.error || undefined }));
 
-function stepLine(run: WorkflowRunState): string {
-  return "steps: " + run.steps.map((s) => `${s.step_id} (${s.model}) ${s.status}`).join("; ");
-}
-
-/**
- * A run state as the tool answer (`storeOutput`: the run's store_output, as asked or as the run records it): completed → the output through the media formatter; failed / cancelled → the
- * SDK's TaskFailedError (as waitRun throws it); otherwise the in-progress summary under `notes`.
- */
-async function answerRun(run: WorkflowRunState, ctx: ToolContext, pending: string[], storeOutput: string | undefined): Promise<CallToolResult> {
+/** The run as the answer envelope: completed → the output through the media formatter; failed / cancelled → TaskFailedError. */
+function answerRun(run: WorkflowRunState, ctx: ToolContext, notes: string[], storeOutput: string | null | undefined, replayed?: boolean): Promise<CallToolResult> {
+  if (run.status === "failed" || run.status === "cancelled") throw failedError(run.run_id, run, "Workflow run");
+  const info = { workflow_id: run.workflow_id, steps: stepsOf(run), total_cost_usd: run.total_cost_usd ?? undefined, replayed };
   if (run.status === "completed") {
-    const notes = [`run_id: ${run.run_id}`, `status: completed`, stepLine(run)];
-    if (run.total_cost_usd != null) notes.push(`total_cost_usd: ${run.total_cost_usd}`);
-    return formatResult(run.output, { ctx, storeOutput, storeOutputApplied: Boolean(storeOutput), notes });
+    const sku = storeOutput && storeOutput !== "provider" ? storeOutput : undefined;
+    return asyncAnswer(ctx, { status: "completed", id: { run_id: run.run_id }, info, output: { body: run.output, store: sku ? "applied" : "none", sku } });
   }
-  if (run.status === "failed" || run.status === "cancelled") {
-    throw new TaskFailedError({ message: run.error || `Workflow run ${run.status}`, taskId: run.run_id, task: run });
-  }
-  return jsonResult({ ...runSummary(run), poll: { tool: "check_workflow_run", run_id: run.run_id } }, pending);
+  return asyncAnswer(ctx, { status: run.status, id: { run_id: run.run_id }, info, notes, next: "check_workflow_run" });
 }
 
-/** waitRun within `ms`; on budget exhaustion, the current run (one extra GET) instead of an error. */
-async function waitOrCurrent(relay: Relay, runId: string, ms: number, signal: AbortSignal): Promise<WorkflowRunState> {
+/** waitRun within `ms`; past it, the current run (one extra GET, else the last state seen). */
+function waitRunOrCurrent(relay: Relay, runId: string, ms: number, signal: AbortSignal): Promise<WorkflowRunState> {
   let last: WorkflowRunState | undefined;
-  try {
-    return await relay.workflows.waitRun(runId, { timeoutMs: ms, signal, onProgress: (r) => (last = r) });
-  } catch (e) {
-    if (!(e instanceof APITimeoutError)) throw e;
-    try {
-      return await relay.workflows.getRun(runId, { signal });
-    } catch (e2) {
-      if (last) return last;
-      throw e2;
-    }
-  }
+  return waitOrCurrent(
+    ms,
+    (budget) => relay.workflows.waitRun(runId, { timeoutMs: budget, signal, onProgress: (r) => (last = r) }),
+    () => relay.workflows.getRun(runId, { signal }).catch((e) => last ?? Promise.reject(e)),
+  );
 }
 
 const list_workflows = defineTool({
@@ -105,19 +75,14 @@ const run_workflow = defineTool({
       .optional()
       .describe("Run-level storage for every media step: `provider` (default, 1 h link) or `relay1d` / `relay7d` / `relay30d` (billed per file, see get_pricing)."),
     webhook_url: z.string().optional().describe("HTTPS URL for one signed workflow.completed / workflow.failed delivery when the run ends."),
-    wait_seconds: z
-      .number()
-      .int()
-      .min(0)
-      .max(RUN_WAIT_MAX_S)
-      .default(RUN_WAIT_MAX_S)
-      .describe(`Seconds to wait for the run to end (0–${RUN_WAIT_MAX_S}, default ${RUN_WAIT_MAX_S}); 0 returns the run_id at once.`),
+    wait_seconds: waitSecondsArg(RUN_WAIT_MAX_S, "returns the run_id at once"),
     idempotency_key: z
       .string()
       .optional()
       .describe("Idempotency-Key for the submit: the same key and inputs within 24 h return the same run_id instead of a new run. Generated when omitted."),
   },
   annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: true },
+  billed: true,
   async handler({ workflow_id, inputs, store_output, webhook_url, wait_seconds, idempotency_key }, ctx) {
     const relay = ctx.client();
     const deadline = Date.now() + wait_seconds * 1000;
@@ -128,14 +93,20 @@ const run_workflow = defineTool({
       signal: ctx.signal,
     });
     const runId = accepted.run_id;
-    const pending = [`run_id: ${runId}`, DO_NOT_RESUBMIT + "."];
-    if (accepted.replayed) pending.push("This submit replayed an earlier one with the same idempotency_key: same run, nothing billed again.");
+    const notes = [DO_NOT_RESUBMIT + "."];
+    if (accepted.replayed) notes.push(REPLAYED_NOTE);
     const remaining = deadline - Date.now();
     if (remaining <= 0) {
-      return jsonResult({ run_id: runId, status: accepted.status, poll: { tool: "check_workflow_run", run_id: runId } }, pending);
+      return asyncAnswer(ctx, {
+        status: accepted.status,
+        id: { run_id: runId },
+        info: { poll_url: accepted.poll_url, replayed: accepted.replayed },
+        notes,
+        next: "check_workflow_run",
+      });
     }
-    const run = await waitOrCurrent(relay, runId, remaining, ctx.signal);
-    return answerRun(run, ctx, [`Run ${runId} is ${run.status} after ${wait_seconds} s.`, ...pending], store_output);
+    const run = await waitRunOrCurrent(relay, runId, remaining, ctx.signal);
+    return answerRun(run, ctx, notes, store_output, accepted.replayed);
   },
 });
 
@@ -148,21 +119,12 @@ const check_workflow_run = defineTool({
     "No key needed: the run_id is the access token.",
   inputSchema: {
     run_id: runIdField,
-    wait_seconds: z
-      .number()
-      .int()
-      .min(0)
-      .max(CHECK_WAIT_MAX_S)
-      .default(CHECK_WAIT_MAX_S)
-      .describe(`Seconds to wait for the run to end (0–${CHECK_WAIT_MAX_S}, default ${CHECK_WAIT_MAX_S}); 0 answers the current state at once.`),
+    wait_seconds: waitSecondsArg(CHECK_WAIT_MAX_S, "answers the current state at once"),
   },
   annotations: { readOnlyHint: true, openWorldHint: true },
   async handler({ run_id, wait_seconds }, ctx) {
-    const run =
-      wait_seconds > 0
-        ? await waitOrCurrent(ctx.catalog, run_id, wait_seconds * 1000, ctx.signal)
-        : await ctx.catalog.workflows.getRun(run_id, { signal: ctx.signal });
-    return answerRun(run, ctx, [STILL_RUNNING], run.store_output ?? undefined);
+    const run = await waitRunOrCurrent(ctx.catalog, run_id, wait_seconds * 1000, ctx.signal);
+    return answerRun(run, ctx, [STILL_RUNNING], run.store_output);
   },
 });
 
@@ -174,9 +136,13 @@ const cancel_workflow_run = defineTool({
     "already ended answers WORKFLOW_RUN_NOT_CANCELLABLE.",
   inputSchema: { run_id: runIdField },
   annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: true, openWorldHint: true },
+  billed: true,
   async handler({ run_id }, ctx) {
     const run = await ctx.client().workflows.cancelRun(run_id);
-    return jsonResult(runSummary(run), [`Run ${run.run_id} is ${run.status}. A step that was already running completes and bills.`]);
+    return jsonResult(
+      { run_id: run.run_id, workflow_id: run.workflow_id, status: run.status, steps: stepsOf(run), total_cost_usd: run.total_cost_usd ?? undefined, error: run.error || undefined },
+      [`Run ${run.run_id} is ${run.status}. A step that was already running completes and bills.`],
+    );
   },
 });
 

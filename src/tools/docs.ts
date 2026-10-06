@@ -4,7 +4,7 @@ import { z } from "zod";
 import { defineTool, jsonResult, textResult, type ToolDef } from "../context.js";
 import docsIndex from "../generated/docs-index.json";
 
-export interface DocSection {
+interface DocSection {
   page: string;
   title: string;
   heading: string;
@@ -12,7 +12,7 @@ export interface DocSection {
   text: string;
 }
 
-export interface DocHit {
+interface DocHit {
   page: string;
   title: string;
   heading: string;
@@ -39,7 +39,7 @@ function stem(t: string): string {
   return t;
 }
 
-export function tokenize(s: string): string[] {
+function tokenize(s: string): string[] {
   return s
     .toLowerCase()
     .split(/[^\p{L}\p{N}]+/u)
@@ -47,35 +47,28 @@ export function tokenize(s: string): string[] {
     .map(stem);
 }
 
-interface Indexed {
-  section: DocSection;
-  tf: Map<string, number>;
-  len: number;
-}
-
-interface Bm25 {
-  docs: Indexed[];
-  df: Map<string, number>;
-  avgLen: number;
-}
-
-let built: Bm25 | undefined;
-
-function build(sections: DocSection[]): Bm25 {
-  const df = new Map<string, number>();
-  const docs = sections.map((section) => {
+/** BM25 index, built once at module load: postings per term, a length norm per section. */
+const sections: DocSection[] = docsIndex.sections;
+const postings = new Map<string, { doc: number; tf: number }[]>();
+const norms: number[] = [];
+{
+  const lens = sections.map((section, doc) => {
     const tf = new Map<string, number>();
     const add = (tokens: string[], w: number) => tokens.forEach((t) => tf.set(t, (tf.get(t) ?? 0) + w));
     add(tokenize(section.text), 1);
     add(tokenize(section.heading), HEADING_WEIGHT);
     add(tokenize(section.title), 1);
-    for (const t of tf.keys()) df.set(t, (df.get(t) ?? 0) + 1);
     let len = 0;
-    for (const n of tf.values()) len += n;
-    return { section, tf, len };
+    for (const [t, n] of tf) {
+      let list = postings.get(t);
+      if (!list) postings.set(t, (list = []));
+      list.push({ doc, tf: n });
+      len += n;
+    }
+    return len;
   });
-  const avgLen = docs.reduce((a, d) => a + d.len, 0) / Math.max(1, docs.length);
-  return { docs, df, avgLen };
+  const avgLen = lens.reduce((a, n) => a + n, 0) / Math.max(1, lens.length);
+  for (const len of lens) norms.push(K1 * (1 - B + (B * len) / avgLen));
 }
 
 /** Trims to ≤ max characters on a word boundary (an ellipsis marks the cut). */
@@ -86,31 +79,22 @@ export function excerpt(text: string, max = EXCERPT_MAX): string {
   return (at > max / 2 ? cut.slice(0, at) : cut).trimEnd() + "…";
 }
 
-export function searchDocs(query: string, limit = 5, sections: DocSection[] = docsIndex.sections): DocHit[] {
-  const idx = sections === docsIndex.sections ? (built ??= build(sections)) : build(sections);
-  const terms = [...new Set(tokenize(query))];
-  const N = idx.docs.length;
-  const scored: { d: Indexed; score: number }[] = [];
-  for (const d of idx.docs) {
-    let score = 0;
-    for (const t of terms) {
-      const f = d.tf.get(t);
-      if (!f) continue;
-      const n = idx.df.get(t) ?? 0;
-      const idf = Math.log(1 + (N - n + 0.5) / (n + 0.5));
-      score += (idf * f * (K1 + 1)) / (f + K1 * (1 - B + (B * d.len) / idx.avgLen));
-    }
-    if (score > 0) scored.push({ d, score });
+export function searchDocs(query: string, limit = 5): DocHit[] {
+  const N = sections.length;
+  const scores = new Map<number, number>();
+  for (const t of new Set(tokenize(query))) {
+    const list = postings.get(t);
+    if (!list) continue;
+    const idf = Math.log(1 + (N - list.length + 0.5) / (list.length + 0.5));
+    for (const { doc, tf } of list) scores.set(doc, (scores.get(doc) ?? 0) + (idf * tf * (K1 + 1)) / (tf + norms[doc]));
   }
-  scored.sort((a, b) => b.score - a.score);
-  return scored.slice(0, limit).map(({ d: { section: s }, score }) => ({
-    page: s.page,
-    title: s.title,
-    heading: s.heading,
-    path: `${s.page}#${s.anchor}`,
-    score: +score.toFixed(3),
-    excerpt: excerpt(s.text),
-  }));
+  return [...scores]
+    .sort((a, b) => b[1] - a[1] || a[0] - b[0])
+    .slice(0, limit)
+    .map(([doc, score]) => {
+      const s = sections[doc];
+      return { page: s.page, title: s.title, heading: s.heading, path: `${s.page}#${s.anchor}`, score: +score.toFixed(3), excerpt: excerpt(s.text) };
+    });
 }
 
 const search_docs = defineTool({

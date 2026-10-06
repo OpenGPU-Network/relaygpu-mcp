@@ -1,14 +1,12 @@
 // run_model (one submit, bounded wait, task_id past the window) and check_task (keyless poll).
 import { z } from "zod";
-import { APITimeoutError, ModelRetiredError, TaskFailedError, isAccepted, type TaskStatus } from "@relaygpu/client";
-import { defineTool, jsonResult, type ToolDef } from "../context.js";
-import { formatResult } from "../media.js";
+import { isAccepted, type TaskStatus } from "@relaygpu/client";
+import { defineTool, type ToolDef } from "../context.js";
+import type { Store } from "../media.js";
+import { CHECK_WAIT_MAX_S, RUN_WAIT_MAX_S, asyncAnswer, doNotResubmit, failedError, stillRunning, waitOrCurrent, waitSecondsArg } from "./pending.js";
 
-export const DO_NOT_RESUBMIT = "Do not resubmit: call check_task with this task_id";
-export const STILL_RUNNING = "Still running: call check_task again with this task_id; do not resubmit.";
-
-const RUN_WAIT_MAX_S = 45;
-const CHECK_WAIT_MAX_S = 30;
+export const DO_NOT_RESUBMIT = doNotResubmit("check_task");
+export const STILL_RUNNING = stillRunning("check_task");
 
 const inlineImagesArg = z
   .boolean()
@@ -20,7 +18,7 @@ const run_model = defineTool({
   title: "Run a Relay model",
   description:
     "Runs any Relay model by name (billed to your key). input follows get_model's request_schema (request_example " +
-    "runs as is). Waits up to 45 s; past that it returns a task_id — do not resubmit, call check_task. Result links " +
+    `runs as is). Waits up to ${RUN_WAIT_MAX_S} s; past that it returns a task_id — do not resubmit, call check_task. Result links ` +
     "expire 1 h after completion unless store_output names a media_storage SKU from get_pricing. Pass an " +
     "idempotency_key if you may retry the same submit.",
   inputSchema: {
@@ -30,94 +28,76 @@ const run_model = defineTool({
       .string()
       .optional()
       .describe("Keep result media longer: a media_storage SKU from get_pricing (e.g. relay7d, adds its per-file fee), or provider (default, 1 h)."),
-    wait_seconds: z.number().int().min(0).max(RUN_WAIT_MAX_S).optional().describe("Seconds to wait for an async task before returning its task_id (0–45, default 45)."),
+    wait_seconds: waitSecondsArg(RUN_WAIT_MAX_S, "returns the task_id at once"),
     idempotency_key: z.string().optional().describe("Your key for this submit: a retry with the same key replays the first task instead of starting (and billing) a new one."),
     inline_images: inlineImagesArg,
   },
-  annotations: { title: "Run a Relay model", readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: true },
-  async handler(args, ctx) {
-    const { model, input, store_output, idempotency_key, inline_images } = args;
-    const waitSeconds = args.wait_seconds ?? RUN_WAIT_MAX_S;
-    // Unknown → ModelNotFoundError, retired → ModelRetiredError, both before anything is submitted.
+  annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: true },
+  billed: true,
+  async handler({ model, input, store_output, wait_seconds, idempotency_key, inline_images }, ctx) {
+    const deadline = Date.now() + wait_seconds * 1000;
+    // Unknown → ModelNotFoundError here; retired → the SDK's ModelRetiredError from client.run. Both before any POST.
     const detail = await ctx.catalog.models.get(model);
-    if (detail.status === "retired") {
-      throw new ModelRetiredError({ message: `Model '${model}' is retired and no longer served`, status: 403, code: "MODEL_RETIRED" });
-    }
-    const client = ctx.client();
-    const storeApplied = Boolean(store_output) && detail.store_output_supported === true;
-    const media = { ctx, storeOutput: store_output, storeOutputApplied: storeApplied, inlineImages: inline_images };
+    const forward = Boolean(store_output) && detail.store_output_supported === true;
+    const sku = store_output && store_output !== "provider" ? store_output : undefined;
+    const store: Store = !sku ? "none" : forward ? "applied" : "unsupported";
+    const media = { store, sku, inlineImages: inline_images };
 
-    const deadline = Date.now() + waitSeconds * 1000;
+    const client = ctx.client();
     const res = await client.run(model, input, {
       wait: false,
-      storeOutput: storeApplied ? store_output : undefined,
+      storeOutput: forward ? store_output : undefined,
       idempotencyKey: idempotency_key,
       signal: ctx.signal,
     });
-    if (!isAccepted(res)) return formatResult(res, media);
+    if (!isAccepted(res)) return asyncAnswer(ctx, { status: "completed", id: {}, output: { body: res, ...media } });
 
-    const pending = (status: string) =>
-      jsonResult({ task_id: res.task_id, poll_url: res.poll_url, status, replayed: res.replayed }, [`${DO_NOT_RESUBMIT}.`]);
+    const id = { task_id: res.task_id };
+    const pending = (task?: TaskStatus) =>
+      asyncAnswer(ctx, {
+        status: task?.status ?? res.status ?? "queued",
+        id,
+        info: { poll_url: res.poll_url, elapsed_seconds: task?.elapsed_seconds, replayed: res.replayed },
+        notes: [`${DO_NOT_RESUBMIT}.`],
+        next: "check_task",
+      });
     const remaining = deadline - Date.now();
-    if (remaining <= 0) return pending(res.status ?? "queued");
-    try {
-      const task = await client.tasks.wait(res.task_id, { timeoutMs: remaining, signal: ctx.signal });
-      return formatResult(task.result ?? {}, { ...media, notes: [`task_id: ${res.task_id}`, "status: completed"] });
-    } catch (e) {
-      if (e instanceof APITimeoutError) return pending(lastStatus(e) ?? res.status ?? "queued");
-      throw e;
-    }
+    if (remaining <= 0) return pending();
+    const task = await waitOrCurrent(
+      remaining,
+      (ms) => client.tasks.wait(res.task_id, { timeoutMs: ms, signal: ctx.signal }),
+      () => client.tasks.get(res.task_id, { signal: ctx.signal }),
+    );
+    if (task.status === "failed") throw failedError(res.task_id, task, "Task");
+    if (task.status !== "completed") return pending(task);
+    return asyncAnswer(ctx, { status: "completed", id, output: { body: task.result ?? {}, ...media } });
   },
 });
-
-/** The task's last seen status from a `tasks.wait` timeout. */
-function lastStatus(e: APITimeoutError): string | undefined {
-  const task = (e.detail as { task?: TaskStatus } | undefined)?.task;
-  return task?.status;
-}
 
 const check_task = defineTool({
   name: "check_task",
   title: "Check a Relay task",
   description:
-    "Checks a task run_model returned (no key needed: the task_id is the capability). Waits up to 30 s for it to " +
+    `Checks a task run_model returned (no key needed: the task_id is the capability). Waits up to ${CHECK_WAIT_MAX_S} s for it to ` +
     "finish; returns the result when completed, else its status: then call check_task again, never resubmit. " +
     "Task results are kept 1 h after they finish.",
   inputSchema: {
     task_id: z.string().describe("The task_id from run_model, e.g. direct:2f9c…"),
-    wait_seconds: z.number().int().min(0).max(CHECK_WAIT_MAX_S).optional().describe("Seconds to wait for the task to finish (0–30, default 30; 0 = just read the status)."),
+    wait_seconds: waitSecondsArg(CHECK_WAIT_MAX_S, "just reads the status"),
     inline_images: inlineImagesArg,
   },
-  annotations: { title: "Check a Relay task", readOnlyHint: true, idempotentHint: true, openWorldHint: true },
-  async handler(args, ctx) {
-    const { task_id, inline_images } = args;
-    const waitSeconds = args.wait_seconds ?? CHECK_WAIT_MAX_S;
-    let task: TaskStatus;
-    if (waitSeconds === 0) {
-      task = await ctx.catalog.tasks.get(task_id, { signal: ctx.signal });
-    } else {
-      try {
-        task = await ctx.catalog.tasks.wait(task_id, { timeoutMs: waitSeconds * 1000, signal: ctx.signal });
-      } catch (e) {
-        if (!(e instanceof APITimeoutError)) throw e;
-        const seen = (e.detail as { task?: TaskStatus } | undefined)?.task;
-        task = seen ?? (await ctx.catalog.tasks.get(task_id, { signal: ctx.signal }));
-      }
-    }
-    if (task.status === "failed") {
-      // The same error tasks.wait throws, for a status read without waiting.
-      throw new TaskFailedError({
-        message: task.error || `Task ${task_id} failed`,
-        code: task.error_code ?? null,
-        detail: task.error_detail ?? undefined,
-        taskId: task_id,
-        task,
-      });
-    }
-    if (task.status === "completed") {
-      return formatResult(task.result ?? {}, { ctx, inlineImages: inline_images, notes: [`task_id: ${task_id}`, "status: completed"] });
-    }
-    return jsonResult({ task_id, status: task.status, elapsed_seconds: task.elapsed_seconds }, [STILL_RUNNING]);
+  annotations: { readOnlyHint: true, idempotentHint: true, openWorldHint: true },
+  async handler({ task_id, wait_seconds, inline_images }, ctx) {
+    const task = await waitOrCurrent(
+      wait_seconds * 1000,
+      (ms) => ctx.catalog.tasks.wait(task_id, { timeoutMs: ms, signal: ctx.signal }),
+      () => ctx.catalog.tasks.get(task_id, { signal: ctx.signal }),
+    );
+    // tasks.wait throws this itself; a read without waiting gets the same error here.
+    if (task.status === "failed") throw failedError(task_id, task, "Task");
+    const id = { task_id };
+    if (task.status === "completed") return asyncAnswer(ctx, { status: "completed", id, output: { body: task.result ?? {}, inlineImages: inline_images } });
+    return asyncAnswer(ctx, { status: task.status, id, info: { elapsed_seconds: task.elapsed_seconds }, notes: [STILL_RUNNING], next: "check_task" });
   },
 });
 

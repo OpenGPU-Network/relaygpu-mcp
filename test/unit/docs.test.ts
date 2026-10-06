@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { docsTools, searchDocs, excerpt, EXCERPT_MAX } from "../../src/tools/docs.js";
 import index from "../../src/generated/docs-index.json";
 import { connect, mockFetch, textOf } from "../helpers/harness.js";
+import { jsonOf } from "../fixtures/relay.js";
 
 describe("docs index (generated from relay-v2/docs)", () => {
   it("has sections, none from reference/api-explorer/ or SUMMARY.md", () => {
@@ -43,9 +44,9 @@ describe("search_docs (A7)", () => {
     const s = await connect({ fetch: m.fetch, tools: docsTools, credential: null });
     const r = await s.call("search_docs", { query: "webhook signature", limit: 2 });
     expect(r.isError).toBeFalsy();
-    const hits = JSON.parse((r.content.at(-1) as { text: string }).text);
+    const hits = jsonOf(r);
     expect(hits).toHaveLength(2);
-    for (const h of hits) expect(Object.keys(h).sort()).toEqual(["excerpt", "heading", "page", "path", "score", "title"]);
+    for (const h of hits as object[]) expect(Object.keys(h).sort()).toEqual(["excerpt", "heading", "page", "path", "score", "title"]);
     const none = await s.call("search_docs", { query: "zzqqxx" });
     expect(none.isError).toBeFalsy();
     expect(textOf(none)).toContain("search_models");

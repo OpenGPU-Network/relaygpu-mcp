@@ -1,7 +1,6 @@
 // get_credits / get_usage: account reads. The server decides who may read them (JWT or custom-tier superkey);
 // the SDK surfaces its 403 as PermissionDeniedError and the wrapper prints it.
 import { z } from "zod";
-import type { UsageParams } from "@relaygpu/client";
 import { defineTool, jsonResult, type ToolDef } from "../context.js";
 
 const AUTH_NOTE = "Needs a dashboard JWT or a custom-tier superkey; a plain inference key gets PERMISSION_DENIED (403).";
@@ -12,6 +11,7 @@ const get_credits = defineTool({
   description: `Read the account's credit balance, active promo credits and consumption. ${AUTH_NOTE}`,
   inputSchema: {},
   annotations: { readOnlyHint: true, openWorldHint: true },
+  billed: true,
   async handler(_args, ctx) {
     return jsonResult(await ctx.client().account.credits());
   },
@@ -28,12 +28,9 @@ const get_usage = defineTool({
     to: z.string().optional().describe("End date `YYYY-MM-DD`; use together with `from`."),
   },
   annotations: { readOnlyHint: true, openWorldHint: true },
+  billed: true,
   async handler({ period, from, to }, ctx) {
-    const params: UsageParams = {};
-    if (period !== undefined) params.period = period;
-    if (from !== undefined) params.from = from;
-    if (to !== undefined) params.to = to;
-    return jsonResult(await ctx.client().account.usage(params));
+    return jsonResult(await ctx.client().account.usage({ period, from, to }));
   },
 });
 

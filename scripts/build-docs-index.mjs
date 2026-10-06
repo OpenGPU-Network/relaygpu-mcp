@@ -3,7 +3,7 @@
 //   npm run build:docs -- --docs /path/to/relay-v2/docs
 // Markdown only; SUMMARY.md and reference/api-explorer/ are skipped. One section per ATX heading (# .. ####)
 // outside fenced code; GitBook `{% %}` tags and HTML comments are dropped; code blocks are kept.
-// Deterministic: sorted files, no timestamp, so a rebuild over unchanged docs diffs clean.
+// Deterministic: files sorted once by docs-relative path, no timestamp, so a rebuild over unchanged docs diffs clean.
 import { readdirSync, readFileSync, statSync, writeFileSync, mkdirSync } from "node:fs";
 import { dirname, join, relative, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -28,7 +28,7 @@ function argValue(name) {
 
 function walk(dir) {
   const out = [];
-  for (const name of readdirSync(dir).sort()) {
+  for (const name of readdirSync(dir)) {
     const p = join(dir, name);
     if (statSync(p).isDirectory()) out.push(...walk(p));
     else if (name.endsWith(".md")) out.push(p);

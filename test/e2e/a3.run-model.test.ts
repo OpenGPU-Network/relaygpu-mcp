@@ -37,6 +37,7 @@ describe.skipIf(!HAS_KEY)("A3 run_model", () => {
     expect(textOf(submitted)).toContain(RESUBMIT_NOTE);
     const taskId = fieldOf(submitted, "task_id");
     expect(taskId).toMatch(/^(direct|opengpu):/);
+    expect(fieldOf(submitted, "tool")).toBe("check_task"); // the envelope's next step
 
     let last = submitted;
     let status = "";

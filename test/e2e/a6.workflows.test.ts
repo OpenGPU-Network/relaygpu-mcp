@@ -1,9 +1,8 @@
-// A6 (F3): list_workflows; run_workflow("script-voiceover", wait_seconds=45) to a completed run; a bounded
-// check_workflow_run(wait_seconds=10) on a RUNNING run; cancel_workflow_run on a fresh run. At most 2 billed runs:
-//   run A — waited to completion. If A is still running after its 45 s window, the 10 s check is measured on A.
-//   run B — submitted with the shortest wait. If A could not host the 10 s check, it is measured on B (B may then
-//           finish its first step before the cancel); otherwise B is cancelled at once, before its first step.
-// The cancel accepts `cancelled` or WORKFLOW_RUN_NOT_CANCELLABLE (B raced to its end); the outcome is logged.
+// A6 against staging, two billed runs:
+//   run A — run_workflow(wait_seconds=45) followed to completed.
+//   run B — submitted without waiting and cancelled at once (before its first step finishes); the bounded
+//           check_workflow_run(wait_seconds=10) is measured on that live run, then the run is followed to cancelled.
+// Relay's cancel is a request: it flags the run, which lands in cancelled after the step in flight.
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { API_KEY, BASE_URL, HAS_KEY, fieldOf, mcpHttp, startHosted, textOf, type McpHandle } from "./harness.js";
 
@@ -14,7 +13,6 @@ describe.skipIf(!HAS_KEY)("A6 workflows", () => {
   let hosted: Awaited<ReturnType<typeof startHosted>>;
   let mcp: McpHandle;
   let inputs: Record<string, unknown>;
-  let timedOnA = false;
 
   beforeAll(async () => {
     hosted = await startHosted();
@@ -32,17 +30,6 @@ describe.skipIf(!HAS_KEY)("A6 workflows", () => {
     await hosted?.close();
   });
 
-  /** check_workflow_run(wait 10) on a running run: answers within ~10 s (+3 s slack for the round trip). */
-  async function timedCheck(runId: string) {
-    const t0 = Date.now();
-    const r = await mcp.call("check_workflow_run", { run_id: runId, wait_seconds: 10 });
-    const seconds = (Date.now() - t0) / 1000;
-    expect(r.isError, textOf(r)).toBeFalsy();
-    expect(seconds).toBeLessThanOrEqual(13);
-    console.info(`[A6] check_workflow_run(wait_seconds=10) answered in ${seconds.toFixed(1)} s, status=${fieldOf(r, "status")}`);
-    return r;
-  }
-
   it("A6 list_workflows has script-voiceover", async () => {
     const r = await mcp.call("list_workflows", {});
     expect(r.isError, textOf(r)).toBeFalsy();
@@ -55,34 +42,44 @@ describe.skipIf(!HAS_KEY)("A6 workflows", () => {
     const runId = fieldOf(r, "run_id");
     expect(runId).toBeTruthy();
     let status = fieldOf(r, "status") ?? "";
-    if (!TERMINAL.has(status)) {
-      timedOnA = true;
-      status = fieldOf(await timedCheck(runId!), "status") ?? "";
-      // Follow to the end, capped ~3 min.
-      for (let i = 0; i < 6 && !TERMINAL.has(status); i++) {
-        const c = await mcp.call("check_workflow_run", { run_id: runId, wait_seconds: 30 });
-        expect(c.isError, textOf(c)).toBeFalsy();
-        status = fieldOf(c, "status") ?? "";
-      }
+    // Follow to the end, capped ~3 min.
+    for (let i = 0; i < 6 && !TERMINAL.has(status); i++) {
+      const c = await mcp.call("check_workflow_run", { run_id: runId, wait_seconds: 30 });
+      expect(c.isError, textOf(c)).toBeFalsy();
+      status = fieldOf(c, "status") ?? "";
     }
     expect(status).toBe("completed");
   });
 
-  it("A6 a fresh run: bounded check (if not done on A) then cancel_workflow_run (billed run B)", async () => {
-    const r = await mcp.call("run_workflow", { workflow_id: WORKFLOW, inputs, wait_seconds: 1 });
+  it("A6 run B: cancelled before its first step finishes, bounded check on the live run, lands cancelled (billed run B)", async () => {
+    // Submit without waiting and cancel at once: Relay flags the run; pending steps never dispatch.
+    const r = await mcp.call("run_workflow", { workflow_id: WORKFLOW, inputs, wait_seconds: 0 });
     expect(r.isError, textOf(r)).toBeFalsy();
-    const runId = fieldOf(r, "run_id");
+    const runId = fieldOf(r, "run_id")!;
     expect(runId).toBeTruthy();
-    if (!timedOnA) await timedCheck(runId!);
-
     const c = await mcp.call("cancel_workflow_run", { run_id: runId });
-    const text = textOf(c);
     if (c.isError) {
-      expect(text).toContain("WORKFLOW_RUN_NOT_CANCELLABLE");
+      expect(textOf(c)).toContain("WORKFLOW_RUN_NOT_CANCELLABLE"); // B raced to its end
       console.info("[A6] cancel outcome: WORKFLOW_RUN_NOT_CANCELLABLE (run B reached its end first)");
-    } else {
-      expect(fieldOf(c, "status")).toBe("cancelled");
-      console.info(`[A6] cancel outcome: cancelled (10 s check measured on run ${timedOnA ? "A" : "B"})`);
+      return;
     }
+    let status = fieldOf(c, "status") ?? "";
+    if (status !== "cancelled") expect(textOf(c)).toContain('"cancel_requested": true');
+
+    // The bounded check on that live run: answers within wait_seconds (+3 s slack), early if the run lands.
+    const t0 = Date.now();
+    let check = await mcp.call("check_workflow_run", { run_id: runId, wait_seconds: 10 });
+    const seconds = (Date.now() - t0) / 1000;
+    expect(seconds).toBeLessThanOrEqual(13);
+    const stateOf = (x: typeof check) => (x.isError ? fieldOf(x, "task_status") : fieldOf(x, "status")) ?? "";
+    status = stateOf(check);
+    console.info(`[A6] check_workflow_run(wait_seconds=10) on run B answered in ${seconds.toFixed(1)} s, status=${status}`);
+    for (let i = 0; i < 6 && !TERMINAL.has(status); i++) {
+      check = await mcp.call("check_workflow_run", { run_id: runId, wait_seconds: 30 });
+      status = stateOf(check);
+    }
+    // completed = the request landed during the last step (cancel saves nothing then).
+    expect(["cancelled", "completed"]).toContain(status);
+    console.info(`[A6] cancel outcome: requested → ${status}`);
   });
 });

@@ -36,7 +36,12 @@ export function errorText(e: unknown, transport: TransportKind): string {
   if (e.code) lines.push(`code: ${e.code}`);
   if (e.status) lines.push(`status: ${e.status}`);
   if (e.requestId) lines.push(`requestId: ${e.requestId}`);
-  if (e instanceof TaskFailedError) lines.push(`task_id: ${e.taskId}`);
+  if (e instanceof TaskFailedError) {
+    lines.push(`task_id: ${e.taskId}`);
+    // The terminal state (failed, or a workflow run's cancelled), so a polling agent can stop.
+    const state = (e.task as { status?: unknown } | null)?.status;
+    if (typeof state === "string") lines.push(`task_status: ${state}`);
+  }
   if (e.retryAfter != null) lines.push(`retry_after_seconds: ${e.retryAfter}`);
   const detail = detailText(e.detail);
   if (detail && detail !== e.message) lines.push(`detail: ${detail}`);

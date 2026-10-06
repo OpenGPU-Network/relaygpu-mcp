@@ -187,6 +187,7 @@ describe("workflow tools (A6 call shapes)", () => {
     r = await s.call("check_workflow_run", { run_id: RUN_ID, wait_seconds: 5 });
     expect(r.isError).toBe(true);
     expect(textOf(r)).toContain("TaskFailedError");
+    expect(textOf(r)).toContain("task_status: cancelled");
     await s.close();
   });
 
@@ -198,6 +199,14 @@ describe("workflow tools (A6 call shapes)", () => {
     expect(m.calls.map((c) => `${c.method} ${c.path}`)).toEqual([`POST ${RUN_PATH}/cancel`]);
     expect(m.calls[0].headers.get("x-api-key")).toBe("relay_sk_unit_test_key");
     expect(textOf(r)).toContain('"status": "cancelled"');
+    await s.close();
+
+    // A live run: Relay answers it still running with cancel_requested set server-side; we say "requested" and point at the check.
+    const live = mockFetch([{ method: "POST", path: `${RUN_PATH}/cancel`, reply: run("running") }]);
+    s = await connect({ fetch: live.fetch, tools: workflowTools });
+    r = await s.call("cancel_workflow_run", { run_id: RUN_ID });
+    expect(r.isError).toBeFalsy();
+    expect(jsonOf(r)).toMatchObject({ status: "running", cancel_requested: true, next: { tool: "check_workflow_run", args: { run_id: RUN_ID } } });
     await s.close();
 
     const ended = mockFetch([{ method: "POST", path: `${RUN_PATH}/cancel`, reply: apiError(409, "WORKFLOW_RUN_NOT_CANCELLABLE", "Run already completed") }]);

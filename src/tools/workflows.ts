@@ -139,9 +139,25 @@ const cancel_workflow_run = defineTool({
   billed: true,
   async handler({ run_id }, ctx) {
     const run = await ctx.client().workflows.cancelRun(run_id);
+    // Relay only flags the run (`cancel_requested`, not on the run state): it lands in `cancelled` once the step in
+    // flight finishes, so a 200 on a live run means "requested", not "done".
+    const ended = run.status === "cancelled" || run.status === "completed" || run.status === "failed";
     return jsonResult(
-      { run_id: run.run_id, workflow_id: run.workflow_id, status: run.status, steps: stepsOf(run), total_cost_usd: run.total_cost_usd ?? undefined, error: run.error || undefined },
-      [`Run ${run.run_id} is ${run.status}. A step that was already running completes and bills.`],
+      {
+        run_id: run.run_id,
+        workflow_id: run.workflow_id,
+        status: run.status,
+        cancel_requested: ended ? undefined : true,
+        steps: stepsOf(run),
+        total_cost_usd: run.total_cost_usd ?? undefined,
+        error: run.error || undefined,
+        next: ended ? undefined : { tool: "check_workflow_run", args: { run_id: run.run_id } },
+      },
+      [
+        ended
+          ? `Run ${run.run_id} is ${run.status}.`
+          : `Cancel requested: run ${run.run_id} lands in cancelled when the step in flight finishes (that step completes and bills). Call check_workflow_run to confirm.`,
+      ],
     );
   },
 });

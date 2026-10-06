@@ -24,7 +24,7 @@
     "build": "tsup",
     "typecheck": "tsc --noEmit",
     "test": "vitest run --dir test/unit",
-    "test:e2e": "npm run build && vitest run --dir test/e2e --no-file-parallelism",
+    "test:e2e": "npm run build && vitest run --config vitest.e2e.config.ts",
     "build:docs": "node scripts/build-docs-index.mjs",
     "start": "node dist/http.js",
     "prepack": "npm run build"

@@ -2,26 +2,24 @@
 
 Relay's MCP server. Your agent can find a Relay model, read its input schema, run it, poll long tasks, upload files, run workflows and search the Relay docs, all from Claude Code, Cursor, VS Code or Claude Desktop. It is built on [`@relaygpu/client`](https://www.npmjs.com/package/@relaygpu/client). The tools are generic and take the model as a string, so a model added to Relay works without a new release.
 
-There are two ways to connect, both running the same server:
+Run it locally; your client starts it on demand:
 
 | | How | Credential |
 |---|---|---|
-| **Hosted** (Streamable HTTP) | `https://mcp.relaygpu.com/mcp` | `X-API-Key: relay_sk_...` header, or `Authorization: Bearer <relay key or dashboard JWT>` |
 | **Local** (stdio) | `npx -y @relaygpu/mcp` (Node ≥ 18) | `RELAY_API_KEY=relay_sk_...` in its environment; optional `RELAY_BASE_URL` (default `https://relaygpu.com`) |
+| **Hosted** (Streamable HTTP) — *coming soon* | `https://mcp.relaygpu.com/mcp` (not live yet) | `X-API-Key: relay_sk_...` header, or `Authorization: Bearer <relay key or dashboard JWT>` |
 
-The server never stores your key. The hosted server reads it from each request and uses it for that request only.
+The server never stores your key: the local server reads it from its environment, the hosted one will read it from each request and use it for that request only.
 
 ## Install
 
 ### Claude Code
 
 ```bash
-# Hosted
-claude mcp add --transport http relay https://mcp.relaygpu.com/mcp --header "X-API-Key: relay_sk_..."
-
-# Local (stdio)
 claude mcp add relay --env RELAY_API_KEY=relay_sk_... -- npx -y @relaygpu/mcp
 ```
+
+Hosted, once it ships: `claude mcp add --transport http relay https://mcp.relaygpu.com/mcp --header "X-API-Key: relay_sk_..."`.
 
 ### Cursor
 
@@ -31,14 +29,15 @@ Edit `~/.cursor/mcp.json` (all projects) or `.cursor/mcp.json` (one project).
 {
   "mcpServers": {
     "relay": {
-      "url": "https://mcp.relaygpu.com/mcp",
-      "headers": { "X-API-Key": "relay_sk_..." }
+      "command": "npx",
+      "args": ["-y", "@relaygpu/mcp"],
+      "env": { "RELAY_API_KEY": "relay_sk_..." }
     }
   }
 }
 ```
 
-Local: `"relay": { "command": "npx", "args": ["-y", "@relaygpu/mcp"], "env": { "RELAY_API_KEY": "relay_sk_..." } }`.
+Hosted, once it ships: `"relay": { "url": "https://mcp.relaygpu.com/mcp", "headers": { "X-API-Key": "relay_sk_..." } }`.
 
 ### VS Code
 
@@ -49,15 +48,16 @@ Edit `.vscode/mcp.json`. VS Code asks for the key once and keeps it in its secre
   "inputs": [{ "type": "promptString", "id": "relay-key", "description": "Relay API key (relay_sk_...)", "password": true }],
   "servers": {
     "relay": {
-      "type": "http",
-      "url": "https://mcp.relaygpu.com/mcp",
-      "headers": { "X-API-Key": "${input:relay-key}" }
+      "type": "stdio",
+      "command": "npx",
+      "args": ["-y", "@relaygpu/mcp"],
+      "env": { "RELAY_API_KEY": "${input:relay-key}" }
     }
   }
 }
 ```
 
-Local: `"relay": { "type": "stdio", "command": "npx", "args": ["-y", "@relaygpu/mcp"], "env": { "RELAY_API_KEY": "${input:relay-key}" } }`.
+Hosted, once it ships: `"relay": { "type": "http", "url": "https://mcp.relaygpu.com/mcp", "headers": { "X-API-Key": "${input:relay-key}" } }`.
 
 ### Claude Desktop (stdio only)
 

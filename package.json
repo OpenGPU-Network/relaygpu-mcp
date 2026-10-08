@@ -1,6 +1,6 @@
 {
   "name": "@relaygpu/mcp",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "Relay's MCP server: run any Relay model, poll tasks, upload files, run workflows and search the docs from Claude Code, Cursor, VS Code and Claude Desktop.",
   "license": "MIT",
   "repository": {

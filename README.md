@@ -6,12 +6,14 @@ Run it locally; your client starts it on demand:
 
 | | How | Credential |
 |---|---|---|
-| **Local** (stdio) | `npx -y @relaygpu/mcp` (Node ≥ 18) | `RELAY_API_KEY=relay_sk_...` in its environment; optional `RELAY_BASE_URL` (default `https://relaygpu.com`) |
+| **Local** (stdio) | `npx -y @relaygpu/mcp` (Node ≥ 20) | `RELAY_API_KEY=relay_sk_...` in its environment; optional `RELAY_BASE_URL` (default `https://relaygpu.com`) |
 | **Hosted** (Streamable HTTP) — *coming soon* | `https://mcp.relaygpu.com/mcp` (not live yet) | `X-API-Key: relay_sk_...` header, or `Authorization: Bearer <relay key or dashboard JWT>` |
 
 The server never stores your key: the local server reads it from its environment, the hosted one will read it from each request and use it for that request only.
 
 ## Install
+
+Every client below runs the same local server with `npx`; put your Relay key where the snippet says. Hosted connections (OAuth, Claude Desktop's connector directory, Codex remote servers) come with the hosted endpoint.
 
 ### Claude Code
 
@@ -19,11 +21,26 @@ The server never stores your key: the local server reads it from its environment
 claude mcp add relay --env RELAY_API_KEY=relay_sk_... -- npx -y @relaygpu/mcp
 ```
 
-Hosted, once it ships: `claude mcp add --transport http relay https://mcp.relaygpu.com/mcp --header "X-API-Key: relay_sk_..."`.
+### Codex
+
+```bash
+codex mcp add relay --env RELAY_API_KEY=relay_sk_... -- npx -y @relaygpu/mcp
+```
+
+Or in `~/.codex/config.toml` (project-level `.codex/config.toml` works for trusted projects):
+
+```toml
+[mcp_servers.relay]
+command = "npx"
+args = ["-y", "@relaygpu/mcp"]
+env = { RELAY_API_KEY = "relay_sk_..." }
+```
 
 ### Cursor
 
-Edit `~/.cursor/mcp.json` (all projects) or `.cursor/mcp.json` (one project).
+[![Add relay MCP server to Cursor](https://cursor.com/deeplink/mcp-install-dark.svg)](cursor://anysphere.cursor-deeplink/mcp/install?name=relay&config=eyJjb21tYW5kIjoibnB4IiwiYXJncyI6WyIteSIsIkByZWxheWdwdS9tY3AiXSwiZW52Ijp7IlJFTEFZX0FQSV9LRVkiOiJyZWxheV9za18uLi4ifX0=)
+
+The button installs the entry below with a placeholder key; replace `relay_sk_...` in Cursor's MCP settings afterwards. By hand: `~/.cursor/mcp.json` (all projects) or `.cursor/mcp.json` (one project).
 
 ```json
 {
@@ -37,11 +54,11 @@ Edit `~/.cursor/mcp.json` (all projects) or `.cursor/mcp.json` (one project).
 }
 ```
 
-Hosted, once it ships: `"relay": { "url": "https://mcp.relaygpu.com/mcp", "headers": { "X-API-Key": "relay_sk_..." } }`.
-
 ### VS Code
 
-Edit `.vscode/mcp.json`. VS Code asks for the key once and keeps it in its secret storage:
+[![Install in VS Code](https://img.shields.io/badge/VS_Code-Install_Relay_MCP-0098FF?style=flat-square&logo=visualstudiocode&logoColor=white)](https://insiders.vscode.dev/redirect/mcp/install?name=relay&config=%7B%22type%22%3A%22stdio%22%2C%22command%22%3A%22npx%22%2C%22args%22%3A%5B%22-y%22%2C%22%40relaygpu%2Fmcp%22%5D%2C%22env%22%3A%7B%22RELAY_API_KEY%22%3A%22%24%7Binput%3Arelay-key%7D%22%7D%2C%22inputs%22%3A%5B%7B%22type%22%3A%22promptString%22%2C%22id%22%3A%22relay-key%22%2C%22description%22%3A%22Relay%20API%20key%20%28relay_sk_...%29%22%2C%22password%22%3Atrue%7D%5D%7D)
+
+VS Code asks for the key once and keeps it in its secret storage. By hand, in `.vscode/mcp.json`:
 
 ```json
 {
@@ -56,8 +73,6 @@ Edit `.vscode/mcp.json`. VS Code asks for the key once and keeps it in its secre
   }
 }
 ```
-
-Hosted, once it ships: `"relay": { "type": "http", "url": "https://mcp.relaygpu.com/mcp", "headers": { "X-API-Key": "${input:relay-key}" } }`.
 
 ### Claude Desktop (stdio only)
 

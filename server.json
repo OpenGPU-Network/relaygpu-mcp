@@ -1,0 +1,33 @@
+{
+  "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
+  "name": "com.relaygpu/mcp",
+  "title": "Relay",
+  "description": "Run any Relay model (image, video, audio, LLM), poll tasks, upload files and search Relay's docs.",
+  "websiteUrl": "https://docs.relaygpu.com/sdk/mcp",
+  "repository": { "url": "https://github.com/OpenGPU-Network/relaygpu-mcp", "source": "github" },
+  "icons": [
+    { "src": "https://raw.githubusercontent.com/OpenGPU-Network/relaygpu-mcp/main/mcpb/icon.png", "mimeType": "image/png", "sizes": ["512x512"] }
+  ],
+  "version": "0.1.4",
+  "packages": [
+    {
+      "registryType": "npm",
+      "registryBaseUrl": "https://registry.npmjs.org",
+      "identifier": "@relaygpu/mcp",
+      "version": "0.1.4",
+      "transport": { "type": "stdio" },
+      "environmentVariables": [
+        { "name": "RELAY_API_KEY", "description": "Your Relay API key (relay_sk_...) from dashboard.relaygpu.com/keys.", "isRequired": true, "isSecret": true, "format": "string" }
+      ]
+    }
+  ],
+  "remotes": [
+    {
+      "type": "streamable-http",
+      "url": "https://mcp.relaygpu.com/mcp",
+      "headers": [
+        { "name": "X-API-Key", "description": "Your Relay API key (relay_sk_...) from dashboard.relaygpu.com/keys.", "isRequired": true, "isSecret": true }
+      ]
+    }
+  ]
+}

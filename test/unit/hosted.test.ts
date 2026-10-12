@@ -34,6 +34,21 @@ describe("credentialFromHeaders", () => {
 });
 
 describe("hosted server", () => {
+  it("F2 a body above the limit gets a 413 naming the limit, never a reset (Content-Length and chunked)", async () => {
+    const big = JSON.stringify({ jsonrpc: "2.0", id: 1, method: "tools/call", params: { name: "upload_file", arguments: { base64: "A".repeat(7 * 1024 * 1024) } } });
+    const headers = { "Content-Type": "application/json", Accept: "application/json, text/event-stream" };
+    const sized = await fetch(hosted.url + "/mcp", { method: "POST", headers, body: big });
+    expect(sized.status).toBe(413);
+    const { error } = await sized.json();
+    expect(error.message).toMatch(/limit is 6\.3 MB.*4 MB/);
+    // No Content-Length: the limit trips while streaming.
+    const stream = new ReadableStream({ start(c) { c.enqueue(new TextEncoder().encode(big)); c.close(); } });
+    const chunked = await fetch(hosted.url + "/mcp", { method: "POST", headers, body: stream, duplex: "half" } as RequestInit);
+    expect(chunked.status).toBe(413);
+    // The server still answers the next request on a fresh connection.
+    expect((await fetch(hosted.url + "/healthz")).status).toBe(200);
+  });
+
   it("A9 /healthz answers status and version", async () => {
     const r = await fetch(hosted.url + "/healthz");
     expect(r.status).toBe(200);

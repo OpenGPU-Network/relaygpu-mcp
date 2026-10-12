@@ -22,6 +22,13 @@ export interface HostedOptions {
 
 // The largest upload_file base64 argument, encoded, plus 1 MB of JSON-RPC headroom.
 const BODY_MAX = Math.ceil((MAX_BASE64_BYTES * 4) / 3) + 1024 * 1024;
+// An oversized body is still read to its end (discarded) so the 413 reaches the client instead of a reset;
+// past this much the connection is cut.
+const DRAIN_MAX = 64 * 1024 * 1024;
+const MB = 1024 * 1024;
+const TOO_LARGE =
+  `Request body too large: the limit is ${(BODY_MAX / MB).toFixed(1)} MB, which fits an upload_file base64 ` +
+  `argument of ${MAX_BASE64_BYTES / MB} MB. For a bigger file pass a public url to upload_file instead.`;
 const CORS_HEADERS = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Methods": "GET, POST, DELETE, OPTIONS",
@@ -83,14 +90,15 @@ function readJson(req: IncomingMessage): Promise<unknown> {
   return new Promise((resolve, reject) => {
     const chunks: Buffer[] = [];
     let size = 0;
+    let tooLarge = Number(req.headers["content-length"]) > BODY_MAX;
     req.on("data", (c: Buffer) => {
       size += c.length;
-      if (size > BODY_MAX) {
-        reject(Object.assign(new Error("body too large"), { status: 413 }));
-        req.destroy();
-      } else chunks.push(c);
+      if (size > BODY_MAX) tooLarge = true;
+      if (!tooLarge) chunks.push(c);
+      else if (size > DRAIN_MAX) req.destroy();
     });
     req.on("end", () => {
+      if (tooLarge) return reject(Object.assign(new Error(TOO_LARGE), { status: 413 }));
       try {
         resolve(JSON.parse(Buffer.concat(chunks).toString("utf8")));
       } catch {
@@ -113,7 +121,7 @@ async function handleMcp(req: IncomingMessage, res: ServerResponse, opts: Hosted
     body = await readJson(req);
   } catch (e) {
     const status = (e as { status?: number }).status ?? 400;
-    return sendJson(res, status, rpcError(-32700, (e as Error).message));
+    return sendJson(res, status, rpcError(status === 413 ? -32600 : -32700, (e as Error).message));
   }
   const server = createRelayMcpServer({ transport: "http", credential: credentialFromHeaders(req.headers), baseUrl: opts.baseUrl, fetch: opts.fetch });
   const transport = new StreamableHTTPServerTransport({ sessionIdGenerator: undefined });

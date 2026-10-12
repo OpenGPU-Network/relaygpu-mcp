@@ -338,10 +338,10 @@ describe("A15 the verifier's clocked behaviour", () => {
 describe("OAuth off (env unset) keeps today's behaviour", () => {
   it("oauthConfigFromEnv needs both the issuer and the resource", () => {
     expect(oauthConfigFromEnv({})).toBeNull();
-    expect(oauthConfigFromEnv({ OAUTH_ISSUER: "https://auth.relaygpu.com" })).toBeNull();
+    expect(oauthConfigFromEnv({ OAUTH_ISSUER: "https://relaygpu.com" })).toBeNull();
     expect(oauthConfigFromEnv({ MCP_RESOURCE_URL: RESOURCE })).toBeNull();
-    expect(oauthConfigFromEnv({ OAUTH_ISSUER: "https://auth.relaygpu.com/", MCP_RESOURCE_URL: RESOURCE, OAUTH_MCP_CLIENT_SECRET: "s" })).toEqual({
-      issuer: "https://auth.relaygpu.com",
+    expect(oauthConfigFromEnv({ OAUTH_ISSUER: "https://relaygpu.com/", MCP_RESOURCE_URL: RESOURCE, OAUTH_MCP_CLIENT_SECRET: "s" })).toEqual({
+      issuer: "https://relaygpu.com",
       resource: RESOURCE,
       clientSecret: "s",
     });

@@ -165,8 +165,8 @@ OAuth is on when both `OAUTH_ISSUER` and `MCP_RESOURCE_URL` are set; with either
 
 | Variable | Value | Notes |
 |---|---|---|
-| `OAUTH_ISSUER` | `https://auth.relaygpu.com` (prod), `https://auth-staging.relaygpu.com` (staging) | Relay's authorization server; the JWKS is read from `{issuer}/v2/oauth/jwks`, the exchange posts to `{issuer}/v2/oauth/token` |
-| `MCP_RESOURCE_URL` | `https://mcp.relaygpu.com/mcp` (prod), `https://mcp-staging.relaygpu.com/mcp` (staging) | This server's public `/mcp` URL: the access token's `aud` must equal it, and the metadata URL is its origin + `/.well-known/oauth-protected-resource` |
+| `OAUTH_ISSUER` | `https://relaygpu.com` (prod), `http://10.0.34.27:1300` (staging, VPN) | Relay's authorization server; the JWKS is read from `{issuer}/v2/oauth/jwks`, the exchange posts to `{issuer}/v2/oauth/token` |
+| `MCP_RESOURCE_URL` | `https://mcp.relaygpu.com/mcp` (prod), `http://relay-mcp-staging.internal.opengpu.network/mcp` (staging, VPN) | This server's public `/mcp` URL: the access token's `aud` must equal it, and the metadata URL is its origin + `/.well-known/oauth-protected-resource` |
 | `OAUTH_MCP_CLIENT_SECRET` | secret | The `relay-mcp` client's secret: the same value as **Relay's** `OAUTH_MCP_CLIENT_SECRET` in the same environment. Without it every exchange fails (`503`) |
 
 A Bearer value that is a JWT issued by `OAUTH_ISSUER` is an access token: the server verifies it (ES256 against the issuer's JWKS, `aud`, `exp` with 60 s skew), exchanges it at Relay for a 5-minute Relay credential and keeps that credential in memory per token hash until 30 s before it expires. A bad, expired or revoked token gets `401` with `WWW-Authenticate: Bearer error="invalid_token", …`; an authorization server that cannot be reached gets `503`. Tokens, credentials and the secret are never logged.

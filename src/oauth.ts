@@ -5,7 +5,7 @@ import { createHash, createPublicKey, verify, type KeyObject } from "node:crypto
 import { log } from "./log.js";
 
 export interface OAuthConfig {
-  /** `OAUTH_ISSUER`, e.g. `https://auth.relaygpu.com`. */
+  /** `OAUTH_ISSUER`, e.g. `https://relaygpu.com`. */
   issuer: string;
   /** `MCP_RESOURCE_URL`, e.g. `https://mcp.relaygpu.com/mcp`: the access token's `aud`. */
   resource: string;

@@ -1,0 +1,38 @@
+{
+  "manifest_version": "0.3",
+  "name": "relay",
+  "display_name": "Relay",
+  "version": "0.0.0",
+  "description": "Run any Relay model, poll long tasks, upload files, run workflows and search the Relay docs.",
+  "long_description": "Relay's MCP server. Your agent finds a Relay model, reads its input schema, runs it, polls long tasks, uploads files, runs workflows and searches the Relay docs. The tools take the model as a string, so a model added to Relay works without a new release. Your key stays in Claude Desktop's secure storage and is only sent to Relay.",
+  "author": { "name": "Relay", "url": "https://relaygpu.com" },
+  "repository": { "type": "git", "url": "https://github.com/OpenGPU-Network/relaygpu-mcp" },
+  "homepage": "https://relaygpu.com",
+  "documentation": "https://docs.relaygpu.com/sdk/mcp",
+  "icon": "icon.png",
+  "license": "MIT",
+  "keywords": ["relay", "image", "video", "audio", "llm", "gpu"],
+  "server": {
+    "type": "node",
+    "entry_point": "server/index.js",
+    "mcp_config": {
+      "command": "node",
+      "args": ["${__dirname}/server/index.js"],
+      "env": { "RELAY_API_KEY": "${user_config.api_key}" }
+    }
+  },
+  "tools_generated": true,
+  "user_config": {
+    "api_key": {
+      "type": "string",
+      "title": "Relay API key",
+      "description": "Your relay_sk_... key from dashboard.relaygpu.com/keys. Search and pricing work without it; running models needs it.",
+      "sensitive": true,
+      "required": true
+    }
+  },
+  "compatibility": {
+    "platforms": ["darwin", "win32", "linux"],
+    "runtimes": { "node": ">=20.0.0" }
+  }
+}

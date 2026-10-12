@@ -27,7 +27,8 @@
     "test:e2e": "npm run build && vitest run --config vitest.e2e.config.ts",
     "build:docs": "node scripts/build-docs-index.mjs",
     "start": "node dist/http.js",
-    "prepack": "npm run build"
+    "prepack": "npm run build",
+    "build:mcpb": "node scripts/build-mcpb.mjs"
   },
   "publishConfig": {
     "access": "public"
@@ -38,6 +39,7 @@
     "zod": "^3.25.76"
   },
   "devDependencies": {
+    "@anthropic-ai/mcpb": "2.1.2",
     "@types/node": "^18.19.130",
     "tsup": "^8.5.1",
     "typescript": "^5.9.3",

@@ -13,13 +13,17 @@ The server never stores your key: the local server reads it from its environment
 
 ## Install
 
-Every client below runs the same local server with `npx`; put your Relay key where the snippet says. Hosted connections (OAuth, Claude Desktop's connector directory, Codex remote servers) come with the hosted endpoint.
+Every client below runs the same local server; put your Relay key where the snippet says. The `npx` snippets need Node 20 or newer on the PATH the client sees (see [Troubleshooting](#troubleshooting)); Claude Desktop's bundle brings its own. Hosted connections (OAuth, Claude Desktop's connector directory) come with the hosted endpoint.
 
 ### Claude Code
 
+Terminal, in the CLI or the VS Code / JetBrains extension alike:
+
 ```bash
-claude mcp add relay --env RELAY_API_KEY=relay_sk_... -- npx -y @relaygpu/mcp
+claude mcp add relay --scope user --env RELAY_API_KEY=relay_sk_... -- npx -y @relaygpu/mcp
 ```
+
+`--scope user` makes it available in every project; without it the server exists only in the directory you ran the command in. Check it with `/mcp` in a new session. If the terminal answers `command not found: claude`, the extension is installed but the CLI is not: install it with `curl -fsSL https://claude.ai/install.sh | bash` (or `npm install -g @anthropic-ai/claude-code`).
 
 ### Codex
 
@@ -54,11 +58,13 @@ The button installs the entry below with a placeholder key; replace `relay_sk_..
 }
 ```
 
-### VS Code
+### VS Code (Copilot agent mode)
+
+This installs the server for VS Code's own agent (Copilot Chat). Using Claude Code inside VS Code? Use the [Claude Code](#claude-code) command instead: the Claude Code extension does not read VS Code's MCP config.
 
 [![Install in VS Code](https://img.shields.io/badge/VS_Code-Install_Relay_MCP-0098FF?style=flat-square&logo=visualstudiocode&logoColor=white)](https://insiders.vscode.dev/redirect/mcp/install?name=relay&config=%7B%22type%22%3A%22stdio%22%2C%22command%22%3A%22npx%22%2C%22args%22%3A%5B%22-y%22%2C%22%40relaygpu%2Fmcp%22%5D%2C%22env%22%3A%7B%22RELAY_API_KEY%22%3A%22%24%7Binput%3Arelay-key%7D%22%7D%2C%22inputs%22%3A%5B%7B%22type%22%3A%22promptString%22%2C%22id%22%3A%22relay-key%22%2C%22description%22%3A%22Relay%20API%20key%20%28relay_sk_...%29%22%2C%22password%22%3Atrue%7D%5D%7D)
 
-VS Code asks for the key once and keeps it in its secret storage. By hand, in `.vscode/mcp.json`:
+VS Code asks for the key once and keeps it in its secret storage. By hand, in `.vscode/mcp.json` (one workspace) or with **MCP: Open User Configuration** (every workspace):
 
 ```json
 {
@@ -74,9 +80,14 @@ VS Code asks for the key once and keeps it in its secret storage. By hand, in `.
 }
 ```
 
-### Claude Desktop (stdio only)
+### Claude Desktop
 
-Claude Desktop, claude.ai connectors and ChatGPT accept remote MCP servers only through OAuth, and v0 does not offer OAuth, so these clients use the local server. Add the following to `claude_desktop_config.json` (Settings → Developer → Edit Config), then restart Claude Desktop:
+1. Download [`relay.mcpb`](https://github.com/OpenGPU-Network/relaygpu-mcp/releases/latest/download/relay.mcpb).
+2. Double-click it. Claude Desktop opens an install dialog: click **Install** and paste your Relay key into the field Claude shows. The key stays in Claude Desktop's secure storage.
+
+The bundle runs on Claude Desktop's built-in Node, so nothing else needs to be installed. Claude Desktop, claude.ai and ChatGPT accept remote MCP servers only through OAuth, which v0 does not offer yet, so they use this local server.
+
+By hand instead: Settings → Developer → Edit Config opens `claude_desktop_config.json` in your default editor. Add the block below at the top level, save, then quit Claude Desktop (⌘Q) and reopen it:
 
 ```json
 {
@@ -91,6 +102,13 @@ Claude Desktop, claude.ai connectors and ChatGPT accept remote MCP servers only 
 ```
 
 Ready-to-copy files are in [`examples/`](examples/).
+
+## Troubleshooting
+
+- **"Server disconnected", "spawn npx ENOENT" or "Executable not found: npx"** (Claude Desktop, Cursor). Apps opened from the Dock or Start menu do not load your shell profile, so a Node installed with nvm, Volta or Homebrew is not on their PATH. Use the Claude Desktop bundle, or put the full path in `"command"`: run `which npx` in a terminal and paste the result (for example `/Users/you/.nvm/versions/node/v22.22.0/bin/npx`).
+- **`TypeError: Relay: no global fetch`**: the client started Node 16 or older. Install Node 20 or newer, or point `"command"` at a newer `npx`.
+- **Windows**: if the client cannot start `npx`, use `"command": "cmd"` with `"args": ["/c", "npx", "-y", "@relaygpu/mcp"]`.
+- **The first start takes a few seconds**: `npx` downloads the package once (about 5 s); later starts take about 1 s.
 
 ## Tools
 

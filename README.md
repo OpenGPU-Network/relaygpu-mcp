@@ -2,47 +2,40 @@
 
 Relay's MCP server. Your agent can find a Relay model, read its input schema, run it, poll long tasks, upload files, run workflows and search the Relay docs, all from Claude Code, Cursor, VS Code or Claude Desktop. It is built on [`@relaygpu/client`](https://www.npmjs.com/package/@relaygpu/client). The tools are generic and take the model as a string, so a model added to Relay works without a new release.
 
-Run it locally; your client starts it on demand:
+Connect to the hosted server, or run it locally:
 
 | | How | Credential |
 |---|---|---|
+| **Hosted** (Streamable HTTP) | `https://mcp.relaygpu.com/mcp`, nothing to install | `X-API-Key: relay_sk_...` header, or `Authorization: Bearer <relay key or dashboard JWT>` |
 | **Local** (stdio) | `npx -y @relaygpu/mcp` (Node ≥ 20) | `RELAY_API_KEY=relay_sk_...` in its environment; optional `RELAY_BASE_URL` (default `https://relaygpu.com`) |
-| **Hosted** (Streamable HTTP) — *coming soon* | `https://mcp.relaygpu.com/mcp` (not live yet) | `X-API-Key: relay_sk_...` header, or `Authorization: Bearer <relay key or dashboard JWT>` |
 
-The server never stores your key: the local server reads it from its environment, the hosted one will read it from each request and use it for that request only.
+The server never stores your key: the hosted one reads it from each request and uses it for that request only, the local one reads it from its environment.
 
 ## Install
 
-Every client below runs the same local server; put your Relay key where the snippet says. The `npx` snippets need Node 20 or newer on the PATH the client sees (see [Troubleshooting](#troubleshooting)); Claude Desktop's bundle brings its own. Hosted connections (OAuth, Claude Desktop's connector directory) come with the hosted endpoint.
+Claude Code, Codex, Cursor and VS Code connect to the hosted server: no Node, no `npx`. Claude Desktop accepts remote servers only through OAuth, which v0 does not offer yet, so it uses the local server through a one-click bundle. Every client can also run the local server; see [Local server](#local-server-stdio).
 
 ### Claude Code
 
 Terminal, in the CLI or the VS Code / JetBrains extension alike:
 
 ```bash
-claude mcp add relay --scope user --env RELAY_API_KEY=relay_sk_... -- npx -y @relaygpu/mcp
+claude mcp add --transport http --scope user relay https://mcp.relaygpu.com/mcp --header "X-API-Key: relay_sk_..."
 ```
 
 `--scope user` makes it available in every project; without it the server exists only in the directory you ran the command in. Check it with `/mcp` in a new session. If the terminal answers `command not found: claude`, the extension is installed but the CLI is not: install it with `curl -fsSL https://claude.ai/install.sh | bash` (or `npm install -g @anthropic-ai/claude-code`).
 
 ### Codex
 
+Codex sends the key as a Bearer token from an environment variable, so the key stays out of `config.toml`. Set `RELAY_API_KEY` in your shell profile, then:
+
 ```bash
-codex mcp add relay --env RELAY_API_KEY=relay_sk_... -- npx -y @relaygpu/mcp
-```
-
-Or in `~/.codex/config.toml` (project-level `.codex/config.toml` works for trusted projects):
-
-```toml
-[mcp_servers.relay]
-command = "npx"
-args = ["-y", "@relaygpu/mcp"]
-env = { RELAY_API_KEY = "relay_sk_..." }
+codex mcp add relay --url https://mcp.relaygpu.com/mcp --bearer-token-env-var RELAY_API_KEY
 ```
 
 ### Cursor
 
-[![Add relay MCP server to Cursor](https://cursor.com/deeplink/mcp-install-dark.svg)](cursor://anysphere.cursor-deeplink/mcp/install?name=relay&config=eyJjb21tYW5kIjoibnB4IiwiYXJncyI6WyIteSIsIkByZWxheWdwdS9tY3AiXSwiZW52Ijp7IlJFTEFZX0FQSV9LRVkiOiJyZWxheV9za18uLi4ifX0=)
+[![Add relay MCP server to Cursor](https://cursor.com/deeplink/mcp-install-dark.svg)](cursor://anysphere.cursor-deeplink/mcp/install?name=relay&config=eyJ1cmwiOiJodHRwczovL21jcC5yZWxheWdwdS5jb20vbWNwIiwiaGVhZGVycyI6eyJYLUFQSS1LZXkiOiJyZWxheV9za18uLi4ifX0=)
 
 The button installs the entry below with a placeholder key; replace `relay_sk_...` in Cursor's MCP settings afterwards. By hand: `~/.cursor/mcp.json` (all projects) or `.cursor/mcp.json` (one project).
 
@@ -50,9 +43,8 @@ The button installs the entry below with a placeholder key; replace `relay_sk_..
 {
   "mcpServers": {
     "relay": {
-      "command": "npx",
-      "args": ["-y", "@relaygpu/mcp"],
-      "env": { "RELAY_API_KEY": "relay_sk_..." }
+      "url": "https://mcp.relaygpu.com/mcp",
+      "headers": { "X-API-Key": "relay_sk_..." }
     }
   }
 }
@@ -62,7 +54,7 @@ The button installs the entry below with a placeholder key; replace `relay_sk_..
 
 This installs the server for VS Code's own agent (Copilot Chat). Using Claude Code inside VS Code? Use the [Claude Code](#claude-code) command instead: the Claude Code extension does not read VS Code's MCP config.
 
-[![Install in VS Code](https://img.shields.io/badge/VS_Code-Install_Relay_MCP-0098FF?style=flat-square&logo=visualstudiocode&logoColor=white)](https://insiders.vscode.dev/redirect/mcp/install?name=relay&config=%7B%22type%22%3A%22stdio%22%2C%22command%22%3A%22npx%22%2C%22args%22%3A%5B%22-y%22%2C%22%40relaygpu%2Fmcp%22%5D%2C%22env%22%3A%7B%22RELAY_API_KEY%22%3A%22%24%7Binput%3Arelay-key%7D%22%7D%2C%22inputs%22%3A%5B%7B%22type%22%3A%22promptString%22%2C%22id%22%3A%22relay-key%22%2C%22description%22%3A%22Relay%20API%20key%20%28relay_sk_...%29%22%2C%22password%22%3Atrue%7D%5D%7D)
+[![Install in VS Code](https://img.shields.io/badge/VS_Code-Install_Relay_MCP-0098FF?style=flat-square&logo=visualstudiocode&logoColor=white)](https://insiders.vscode.dev/redirect/mcp/install?name=relay&config=%7B%22type%22%3A%22http%22%2C%22url%22%3A%22https%3A%2F%2Fmcp.relaygpu.com%2Fmcp%22%2C%22headers%22%3A%7B%22X-API-Key%22%3A%22%24%7Binput%3Arelay-key%7D%22%7D%2C%22inputs%22%3A%5B%7B%22type%22%3A%22promptString%22%2C%22id%22%3A%22relay-key%22%2C%22description%22%3A%22Relay%20API%20key%20%28relay_sk_...%29%22%2C%22password%22%3Atrue%7D%5D%7D)
 
 VS Code asks for the key once and keeps it in its secret storage. By hand, in `.vscode/mcp.json` (one workspace) or with **MCP: Open User Configuration** (every workspace):
 
@@ -71,10 +63,9 @@ VS Code asks for the key once and keeps it in its secret storage. By hand, in `.
   "inputs": [{ "type": "promptString", "id": "relay-key", "description": "Relay API key (relay_sk_...)", "password": true }],
   "servers": {
     "relay": {
-      "type": "stdio",
-      "command": "npx",
-      "args": ["-y", "@relaygpu/mcp"],
-      "env": { "RELAY_API_KEY": "${input:relay-key}" }
+      "type": "http",
+      "url": "https://mcp.relaygpu.com/mcp",
+      "headers": { "X-API-Key": "${input:relay-key}" }
     }
   }
 }
@@ -85,7 +76,7 @@ VS Code asks for the key once and keeps it in its secret storage. By hand, in `.
 1. Download [`relay.mcpb`](https://github.com/OpenGPU-Network/relaygpu-mcp/releases/latest/download/relay.mcpb).
 2. Double-click it. Claude Desktop opens an install dialog: click **Install** and paste your Relay key into the field Claude shows. The key stays in Claude Desktop's secure storage.
 
-The bundle runs on Claude Desktop's built-in Node, so nothing else needs to be installed. Claude Desktop, claude.ai and ChatGPT accept remote MCP servers only through OAuth, which v0 does not offer yet, so they use this local server.
+The bundle runs on Claude Desktop's built-in Node, so nothing else needs to be installed.
 
 By hand instead: Settings → Developer → Edit Config opens `claude_desktop_config.json` in your default editor. Add the block below at the top level, save, then quit Claude Desktop (⌘Q) and reopen it:
 
@@ -100,6 +91,17 @@ By hand instead: Settings → Developer → Edit Config opens `claude_desktop_co
   }
 }
 ```
+
+### Local server (stdio)
+
+Any client can run the server on your machine instead; it needs Node 20 or newer on the PATH the client sees (see [Troubleshooting](#troubleshooting)).
+
+```bash
+claude mcp add relay --scope user --env RELAY_API_KEY=relay_sk_... -- npx -y @relaygpu/mcp
+codex mcp add relay --env RELAY_API_KEY=relay_sk_... -- npx -y @relaygpu/mcp
+```
+
+Cursor (`~/.cursor/mcp.json`) and VS Code take the same `command` / `args` / `env` entry as the Claude Desktop block above; VS Code adds `"type": "stdio"` and lists it under `"servers"`.
 
 Ready-to-copy files are in [`examples/`](examples/).
 

@@ -1,6 +1,7 @@
 # Changelog
 
 ## Unreleased
+- (branch `hosted-first`, merges once `mcp.relaygpu.com` answers) README: the hosted endpoint is the first option for Claude Code, Codex (`--bearer-token-env-var`), Cursor and VS Code; the local server moves to its own section; Claude Desktop keeps the bundle.
 - Claude Desktop one-click bundle: `npm run build:mcpb` builds `build/relay.mcpb` (the stdio server in one file on Claude Desktop's built-in Node, the key in a sensitive `user_config` field). Attach it to the GitHub release as `relay.mcpb`; the README links `releases/latest/download/relay.mcpb`.
 - README install fixes from the setup hunt (2026-10-12): Claude Code `--scope user` and the missing-CLI case; the VS Code section is Copilot's agent, not the Claude Code extension; Claude Desktop leads with the bundle; a Troubleshooting section (GUI PATH, Node 16, Windows `cmd /c`, first-start time).
 

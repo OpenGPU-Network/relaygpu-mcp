@@ -1,5 +1,8 @@
 # Changelog
 
+## Unreleased
+- Hosted: "Connect Relay" (OAuth) behind `OAUTH_ISSUER` + `MCP_RESOURCE_URL` (+ `OAUTH_MCP_CLIENT_SECRET`, shared with Relay); with either unset nothing changes. When on: RFC 9728 metadata at `/.well-known/oauth-protected-resource` (and `…/mcp`); every `/mcp` request without a credential gets `401` + `WWW-Authenticate: Bearer resource_metadata="…", scope="relay"` (no anonymous calls, `initialize` included); an access token from the issuer is verified (ES256 against the JWKS, refetched on an unknown `kid` at most once a minute; `aud`; `exp` with 60 s skew) and exchanged at Relay (RFC 8693) for a 5-minute Relay credential cached per token hash. A bad or revoked token → `401 invalid_token`; an unreachable authorization server → `503`. `X-API-Key` and every other Bearer behave as before; the stdio server is unchanged. The server card says a credential is required (OAuth or header) when OAuth is on. No new dependency (`node:crypto`).
+
 ## 0.1.4 — 2026-10-12
 - Hosted: a request body above the limit gets a clean `413` that names the limit (6.3 MB, which fits a 4 MB `upload_file` base64 argument) instead of a connection reset that proxies reported as `502`.
 - README: the Claude Desktop bundle installs switched off; the enable steps (Settings → Extensions → Relay → Configure → key → Save → switch on) are listed, and `get_credits` / `get_usage` are marked as taking a dashboard JWT or a superkey, never a plain key.

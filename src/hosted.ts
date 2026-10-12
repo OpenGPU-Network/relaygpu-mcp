@@ -1,5 +1,6 @@
 // Hosted Streamable HTTP server, stateless: a fresh McpServer + transport per request, the caller's credential read
-// from that request's headers for that request only (never stored, never logged).
+// from that request's headers for that request only (never stored, never logged). With OAuth on, an access token is
+// swapped for a short-lived Relay credential held in memory per token hash (src/oauth.ts).
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
 import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
@@ -9,6 +10,7 @@ import type { Credential } from "./context.js";
 import { createRelayMcpServer, SERVER_INSTRUCTIONS, SERVER_NAME } from "./server.js";
 import { renderMetrics } from "./metrics.js";
 import { log } from "./log.js";
+import { createOAuth, PRM_PATH, SCOPE, type OAuth, type OAuthConfig } from "./oauth.js";
 import { MAX_BASE64_BYTES } from "./tools/files.js";
 import { VERSION } from "./version.js";
 
@@ -18,6 +20,8 @@ export interface HostedOptions {
   baseUrl?: string;
   /** Test seam: the fetch every SDK client uses. */
   fetch?: typeof fetch;
+  /** "Connect Relay" (OAuth). Unset = off: no protected-resource metadata, keyless calls answer as before. */
+  oauth?: OAuthConfig | null;
 }
 
 // The largest upload_file base64 argument, encoded, plus 1 MB of JSON-RPC headroom.
@@ -33,7 +37,7 @@ const CORS_HEADERS = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Methods": "GET, POST, DELETE, OPTIONS",
   "Access-Control-Allow-Headers": "Content-Type, Accept, X-API-Key, Authorization, Mcp-Session-Id, Mcp-Protocol-Version, Last-Event-ID",
-  "Access-Control-Expose-Headers": "Mcp-Session-Id",
+  "Access-Control-Expose-Headers": "Mcp-Session-Id, WWW-Authenticate",
 };
 
 /** `X-API-Key` wins (as on Relay); a Bearer value is a relay key when `relay_sk_`-prefixed, else a dashboard JWT. */
@@ -60,7 +64,30 @@ export async function listTools(opts: { baseUrl?: string; fetch?: typeof fetch }
   }
 }
 
-function serverCard(tools: Tool[]) {
+const HEADER_SCHEMES = [
+  { type: "header", name: "X-API-Key", description: "A Relay key (relay_sk_…)." },
+  { type: "bearer", name: "Authorization", description: "A Relay key or a dashboard login JWT." },
+];
+
+function authentication(oauth: OAuth | null) {
+  if (!oauth) return { required: false, note: "Keyless tools answer without a credential; billed tools need one.", schemes: HEADER_SCHEMES };
+  return {
+    required: true,
+    note: "Every request needs a credential: sign in with OAuth (Connect Relay), or send a Relay key header.",
+    schemes: [
+      {
+        type: "oauth2",
+        resource_metadata: oauth.prmUrl,
+        authorization_servers: [oauth.config.issuer],
+        scopes: [SCOPE],
+        description: "Connect Relay: sign in to Relay and approve the app.",
+      },
+      ...HEADER_SCHEMES,
+    ],
+  };
+}
+
+function serverCard(tools: Tool[], oauth: OAuth | null) {
   return {
     name: SERVER_NAME,
     title: "Relay",
@@ -68,23 +95,17 @@ function serverCard(tools: Tool[]) {
     description: SERVER_INSTRUCTIONS,
     homepage: "https://relaygpu.com",
     transport: { type: "streamable-http", path: "/mcp" },
-    authentication: {
-      required: false,
-      note: "Keyless tools answer without a credential; billed tools need one.",
-      schemes: [
-        { type: "header", name: "X-API-Key", description: "A Relay key (relay_sk_…)." },
-        { type: "bearer", name: "Authorization", description: "A Relay key or a dashboard login JWT." },
-      ],
-    },
+    authentication: authentication(oauth),
     tools,
   };
 }
 
-function send(res: ServerResponse, status: number, body: string, type: string) {
-  res.writeHead(status, { "Content-Type": type, ...CORS_HEADERS }).end(body);
+function send(res: ServerResponse, status: number, body: string, type: string, headers: Record<string, string> = {}) {
+  res.writeHead(status, { "Content-Type": type, ...CORS_HEADERS, ...headers }).end(body);
 }
 
-const sendJson = (res: ServerResponse, status: number, body: string) => send(res, status, body, "application/json");
+const sendJson = (res: ServerResponse, status: number, body: string, headers?: Record<string, string>) =>
+  send(res, status, body, "application/json", headers);
 
 function readJson(req: IncomingMessage): Promise<unknown> {
   return new Promise((resolve, reject) => {
@@ -111,7 +132,39 @@ function readJson(req: IncomingMessage): Promise<unknown> {
 
 const rpcError = (code: number, message: string) => JSON.stringify({ jsonrpc: "2.0", error: { code, message }, id: null });
 
-async function handleMcp(req: IncomingMessage, res: ServerResponse, opts: HostedOptions) {
+const SIGN_IN =
+  "Authentication required: connect with OAuth (Connect Relay), or send X-API-Key: relay_sk_… or Authorization: Bearer <Relay key>.";
+const SIGN_IN_AGAIN = "The access token is invalid or expired, or the connection was revoked: sign in again.";
+const AS_DOWN = "Relay's authorization server could not be reached to accept this sign-in; try again shortly.";
+
+/**
+ * The credential this request runs with, or false when an answer was already sent. With OAuth on: no credential →
+ * 401 challenge (D-O3); an access token from our issuer → verified and exchanged for a Relay credential. Every other
+ * credential passes through unchanged.
+ */
+async function authorize(req: IncomingMessage, res: ServerResponse, oauth: OAuth | null): Promise<Credential | null | false> {
+  const credential = credentialFromHeaders(req.headers);
+  if (!oauth) return credential;
+  if (!credential) {
+    sendJson(res, 401, rpcError(-32001, SIGN_IN), { "WWW-Authenticate": `Bearer resource_metadata="${oauth.prmUrl}", scope="${SCOPE}"` });
+    return false;
+  }
+  if (!credential.jwt || !oauth.owns(credential.jwt)) return credential;
+  const r = await oauth.resolve(credential.jwt);
+  if (r.ok) return { jwt: r.jwt };
+  if (r.status === 401) {
+    sendJson(res, 401, rpcError(-32001, SIGN_IN_AGAIN), {
+      "WWW-Authenticate": `Bearer error="invalid_token", resource_metadata="${oauth.prmUrl}"`,
+    });
+  } else {
+    sendJson(res, 503, rpcError(-32000, AS_DOWN), { "Retry-After": "5" });
+  }
+  return false;
+}
+
+async function handleMcp(req: IncomingMessage, res: ServerResponse, opts: HostedOptions, oauth: OAuth | null) {
+  const credential = await authorize(req, res, oauth);
+  if (credential === false) return;
   if (req.method !== "POST") {
     // Stateless: no standalone SSE stream and no session to delete.
     return sendJson(res, 405, rpcError(-32000, "Method not allowed: this server is stateless, POST only."));
@@ -123,7 +176,7 @@ async function handleMcp(req: IncomingMessage, res: ServerResponse, opts: Hosted
     const status = (e as { status?: number }).status ?? 400;
     return sendJson(res, status, rpcError(status === 413 ? -32600 : -32700, (e as Error).message));
   }
-  const server = createRelayMcpServer({ transport: "http", credential: credentialFromHeaders(req.headers), baseUrl: opts.baseUrl, fetch: opts.fetch });
+  const server = createRelayMcpServer({ transport: "http", credential, baseUrl: opts.baseUrl, fetch: opts.fetch });
   const transport = new StreamableHTTPServerTransport({ sessionIdGenerator: undefined });
   res.on("close", () => {
     void transport.close();
@@ -135,16 +188,18 @@ async function handleMcp(req: IncomingMessage, res: ServerResponse, opts: Hosted
 }
 
 export async function startHostedServer(opts: HostedOptions): Promise<{ server: Server; url: string; close(): Promise<void> }> {
-  const card = JSON.stringify(serverCard(await listTools(opts)), null, 2);
+  const oauth = opts.oauth ? createOAuth(opts.oauth) : null;
+  const card = JSON.stringify(serverCard(await listTools(opts), oauth), null, 2);
   const server = createServer(async (req, res) => {
     const path = (req.url ?? "/").split("?")[0];
     try {
       if (req.method === "OPTIONS") return void res.writeHead(204, CORS_HEADERS).end();
-      if (path === "/mcp") return await handleMcp(req, res, opts);
+      if (path === "/mcp") return await handleMcp(req, res, opts, oauth);
       if (req.method !== "GET") return sendJson(res, 405, '{"error":"method not allowed"}');
       if (path === "/healthz") return sendJson(res, 200, JSON.stringify({ status: "ok", version: VERSION }));
       if (path === "/metrics") return send(res, 200, renderMetrics(), "text/plain; version=0.0.4");
       if (path === "/.well-known/mcp/server-card.json") return sendJson(res, 200, card);
+      if (oauth && (path === PRM_PATH || path === PRM_PATH + "/mcp")) return sendJson(res, 200, oauth.prm);
       sendJson(res, 404, '{"error":"not found"}');
     } catch (e) {
       log("error", "http_request_failed", { path, error: e instanceof Error ? e.name : "unknown" });

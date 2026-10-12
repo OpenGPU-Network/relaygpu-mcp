@@ -117,7 +117,7 @@ Ready-to-copy files are in [`examples/`](examples/).
 
 ## Tools
 
-Tools marked *keyless* work without a credential. The others are billed or account tools and need one.
+Tools marked *keyless* work without a credential on the local server. The others are billed or account tools and need one. A hosted server with OAuth on (see [Self-hosting](#self-hosting)) takes no request without a credential, keyless tools included.
 
 | Tool | What it does | Example |
 |---|---|---|
@@ -138,7 +138,7 @@ Tools marked *keyless* work without a credential. The others are billed or accou
 
 ## Notes
 
-- **Auth.** `tools/list` and the keyless tools answer without a credential. A billed tool called without one returns a `MISSING_CREDENTIALS` tool error that names what to set: the `X-API-Key` header (hosted) or `RELAY_API_KEY` (stdio). Errors from Relay come back as tool errors that include the error class, `code`, `requestId` and the server's detail. Your key never appears in a tool result or a log line.
+- **Auth.** On the local server, and on a hosted server without OAuth, `tools/list` and the keyless tools answer without a credential. A hosted server with OAuth on answers every `/mcp` request without a credential with `401` and `WWW-Authenticate: Bearer resource_metadata="…", scope="relay"`, which is how clients start the "Connect Relay" sign-in; `X-API-Key` and `Authorization: Bearer <relay key or dashboard JWT>` keep working there. A billed tool called without one returns a `MISSING_CREDENTIALS` tool error that names what to set: the `X-API-Key` header (hosted) or `RELAY_API_KEY` (stdio). Errors from Relay come back as tool errors that include the error class, `code`, `requestId` and the server's detail. Your key never appears in a tool result or a log line.
 - **Long tasks.** `run_model` waits up to 45 s (`wait_seconds`, 0–45). If the task is still running after that, it returns the `task_id` and the line "Do not resubmit: call check_task with this task_id". Every submit carries an `Idempotency-Key`, so a retry does not bill twice. Pass your own `idempotency_key` if your agent might send the same submit again.
 - **Expiry.** Each result link comes with its expiry: "expires 1 h after completion unless store_output was set". To keep results longer, pass `store_output` with a `media_storage` SKU from `get_pricing` (for example `relay7d`). That SKU adds a per-file fee.
 - **Re-hosting.** Some routes return images only as inline base64 (for example gpt-image and Flux). The server uploads those images through `/v2/files`, at the `store_output` retention or `relay1h` by default (free within the daily quota), and returns a URL and a `file_id` instead of the base64. Image content blocks are opt-in: pass `inline_images: true`, which applies to images of 1 MB or less.
@@ -157,6 +157,19 @@ The server listens on `PORT` (default 2300) and calls Relay at `RELAY_BASE_URL`.
 - `GET /healthz`: returns `{status, version}`.
 - `GET /metrics`: Prometheus text with `mcp_tool_calls_total{tool,outcome}` and `mcp_tool_seconds{tool}`.
 - `GET /.well-known/mcp/server-card.json`: the server and its tools.
+- `GET /.well-known/oauth-protected-resource` (and `…/mcp`): the RFC 9728 protected-resource metadata, only with OAuth on.
+
+### OAuth ("Connect Relay")
+
+OAuth is on when both `OAUTH_ISSUER` and `MCP_RESOURCE_URL` are set; with either unset the server behaves as above (no metadata route, keyless tools answer without a credential). All three variables belong to the **MCP app** and are read once at start:
+
+| Variable | Value | Notes |
+|---|---|---|
+| `OAUTH_ISSUER` | `https://auth.relaygpu.com` (prod), `https://auth-staging.relaygpu.com` (staging) | Relay's authorization server; the JWKS is read from `{issuer}/v2/oauth/jwks`, the exchange posts to `{issuer}/v2/oauth/token` |
+| `MCP_RESOURCE_URL` | `https://mcp.relaygpu.com/mcp` (prod), `https://mcp-staging.relaygpu.com/mcp` (staging) | This server's public `/mcp` URL: the access token's `aud` must equal it, and the metadata URL is its origin + `/.well-known/oauth-protected-resource` |
+| `OAUTH_MCP_CLIENT_SECRET` | secret | The `relay-mcp` client's secret: the same value as **Relay's** `OAUTH_MCP_CLIENT_SECRET` in the same environment. Without it every exchange fails (`503`) |
+
+A Bearer value that is a JWT issued by `OAUTH_ISSUER` is an access token: the server verifies it (ES256 against the issuer's JWKS, `aud`, `exp` with 60 s skew), exchanges it at Relay for a 5-minute Relay credential and keeps that credential in memory per token hash until 30 s before it expires. A bad, expired or revoked token gets `401` with `WWW-Authenticate: Bearer error="invalid_token", …`; an authorization server that cannot be reached gets `503`. Tokens, credentials and the secret are never logged.
 
 Logs are JSON lines on stderr, `WARNING` and above by default (`LOG_LEVEL`). Without Docker, run `npm ci && npm run build && node dist/http.js`.
 

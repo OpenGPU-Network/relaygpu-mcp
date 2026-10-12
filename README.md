@@ -74,9 +74,12 @@ VS Code asks for the key once and keeps it in its secret storage. By hand, in `.
 ### Claude Desktop
 
 1. Download [`relay.mcpb`](https://github.com/OpenGPU-Network/relaygpu-mcp/releases/latest/download/relay.mcpb).
-2. Double-click it. Claude Desktop opens an install dialog: click **Install** and paste your Relay key into the field Claude shows. The key stays in Claude Desktop's secure storage.
+2. Double-click it. Claude Desktop opens an install dialog: click **Install**.
+3. The extension installs switched off. Open Settings → Extensions → **Relay** → **Configure**.
+4. Paste your Relay key and click **Save**. The key stays in Claude Desktop's secure storage.
+5. Switch **Relay** on.
 
-The bundle runs on Claude Desktop's built-in Node, so nothing else needs to be installed.
+The bundle runs on Claude Desktop's built-in Node, so nothing else needs to be installed. `get_credits` and `get_usage` read the account, so they take a dashboard JWT or a custom-tier superkey, never a plain key; every other tool works with a plain key.
 
 By hand instead: Settings → Developer → Edit Config opens `claude_desktop_config.json` in your default editor. Add the block below at the top level, save, then quit Claude Desktop (⌘Q) and reopen it:
 

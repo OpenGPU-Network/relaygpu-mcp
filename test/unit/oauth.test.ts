@@ -278,12 +278,49 @@ describe("A15 the verifier's clocked behaviour", () => {
     expect(as.exchanges - before).toBe(2);
   });
 
+  it("a revoked token is refused from cache: one exchange, then none until it expires", async () => {
+    const { oauth } = clocked();
+    const token = mint();
+    as.mode = "invalid_grant";
+    try {
+      const before = as.exchanges;
+      expect(await oauth.resolve(token)).toEqual({ ok: false, status: 401 });
+      expect(await oauth.resolve(token)).toEqual({ ok: false, status: 401 });
+      expect(as.exchanges - before).toBe(1);
+    } finally {
+      as.mode = "ok";
+    }
+  });
+
+  it("a cache hit makes no authorization-server call, even with the AS failing", async () => {
+    const { oauth, advance } = clocked();
+    const token = mint();
+    expect(await oauth.resolve(token)).toMatchObject({ ok: true });
+    as.mode = "500";
+    try {
+      advance(120_000); // past the JWKS refetch window, inside the credential's life
+      const before = as.jwks;
+      expect(await oauth.resolve(token)).toMatchObject({ ok: true });
+      expect(as.jwks).toBe(before);
+    } finally {
+      as.mode = "ok";
+    }
+  });
+
+  it("a JWT from another issuer is not ours: resolve answers null and calls nothing", async () => {
+    const { oauth } = clocked();
+    const before = { ex: as.exchanges, jwks: as.jwks };
+    expect(await oauth.resolve(mint({ iss: "https://elsewhere.example" }))).toBeNull();
+    expect(await oauth.resolve("not-a-jwt")).toBeNull();
+    expect(as).toMatchObject({ exchanges: before.ex, jwks: before.jwks });
+  });
+
   it("concurrent first calls with one token share one exchange", async () => {
     const { oauth } = clocked();
     const token = mint();
     const before = as.exchanges;
     const rs = await Promise.all([oauth.resolve(token), oauth.resolve(token), oauth.resolve(token)]);
-    expect(rs.every((r) => r.ok)).toBe(true);
+    expect(rs.every((r) => r?.ok)).toBe(true);
     expect(as.exchanges - before).toBe(1);
   });
 

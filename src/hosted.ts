@@ -78,7 +78,7 @@ function authentication(oauth: OAuth | null) {
       {
         type: "oauth2",
         resource_metadata: oauth.prmUrl,
-        authorization_servers: [oauth.config.issuer],
+        authorization_servers: [oauth.issuer],
         scopes: [SCOPE],
         description: "Connect Relay: sign in to Relay and approve the app.",
       },
@@ -149,8 +149,8 @@ async function authorize(req: IncomingMessage, res: ServerResponse, oauth: OAuth
     sendJson(res, 401, rpcError(-32001, SIGN_IN), { "WWW-Authenticate": `Bearer resource_metadata="${oauth.prmUrl}", scope="${SCOPE}"` });
     return false;
   }
-  if (!credential.jwt || !oauth.owns(credential.jwt)) return credential;
-  const r = await oauth.resolve(credential.jwt);
+  const r = credential.jwt ? await oauth.resolve(credential.jwt) : null;
+  if (!r) return credential; // a key, or a JWT that is not our access token: unchanged
   if (r.ok) return { jwt: r.jwt };
   if (r.status === 401) {
     sendJson(res, 401, rpcError(-32001, SIGN_IN_AGAIN), {
@@ -163,6 +163,7 @@ async function authorize(req: IncomingMessage, res: ServerResponse, oauth: OAuth
 }
 
 async function handleMcp(req: IncomingMessage, res: ServerResponse, opts: HostedOptions, oauth: OAuth | null) {
+  // Auth first, even for a GET: a client probing /mcp must meet the 401 challenge to discover OAuth.
   const credential = await authorize(req, res, oauth);
   if (credential === false) return;
   if (req.method !== "POST") {

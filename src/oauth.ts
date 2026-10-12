@@ -63,15 +63,22 @@ function parseJwt(token: string): Parsed | null {
 const sha256 = (s: string) => createHash("sha256").update(s).digest("hex");
 
 export interface OAuth {
-  config: OAuthConfig;
+  issuer: string;
   /** `<resource origin>/.well-known/oauth-protected-resource`. */
   prmUrl: string;
   /** The RFC 9728 document, serialized. */
   prm: string;
-  /** A Bearer value is ours when it is a JWT whose (unverified) `iss` is the issuer. */
-  owns(bearer: string): boolean;
-  /** Verify, then exchange (or read the cache) into a Relay credential. */
-  resolve(token: string): Promise<Resolution>;
+  /**
+   * null when the Bearer is not ours (not a JWT whose unverified `iss` is the issuer: a dashboard JWT passes through);
+   * else verify, then exchange (or read the cache) into a Relay credential.
+   */
+  resolve(bearer: string): Promise<Resolution | null>;
+}
+
+interface Entry {
+  jwt: string;
+  /** ms: the earlier of the credential's expiry (less the margin) and the access token's own. */
+  until: number;
 }
 
 export function createOAuth(config: OAuthConfig, seams: { fetch?: typeof fetch; now?: () => number } = {}): OAuth {
@@ -86,9 +93,17 @@ export function createOAuth(config: OAuthConfig, seams: { fetch?: typeof fetch; 
   let fetchedAt = -Infinity;
   let jwksFailed = false;
   let loading: Promise<void> | null = null;
-  // Insertion order is recency order: a hit is re-inserted, the oldest entry goes first.
-  const cache = new Map<string, { jwt: string; until: number }>();
-  const inflight = new Map<string, Promise<{ jwt: string; until: number }>>();
+  // Insertion order is recency order: a hit is re-inserted, the oldest entry goes first. `refused` holds tokens the
+  // exchange turned away (revoked grant) until they expire, so a disconnected client does not hit Relay per request.
+  const cache = new Map<string, Entry>();
+  const refused = new Map<string, number>();
+  const inflight = new Map<string, Promise<Entry>>();
+
+  function remember<V>(map: Map<string, V>, h: string, value: V) {
+    map.delete(h);
+    if (map.size >= CACHE_MAX) map.delete(map.keys().next().value as string);
+    map.set(h, value);
+  }
 
   async function loadJwks(): Promise<void> {
     fetchedAt = now();
@@ -145,7 +160,7 @@ export function createOAuth(config: OAuthConfig, seams: { fetch?: typeof fetch; 
     return null;
   }
 
-  async function exchange(token: string): Promise<{ jwt: string; until: number }> {
+  async function exchange(token: string, tokenExpMs: number): Promise<Entry> {
     let r: Response;
     try {
       r = await fetchImpl(tokenUrl, {
@@ -167,36 +182,41 @@ export function createOAuth(config: OAuthConfig, seams: { fetch?: typeof fetch; 
       throw new Unavailable(`exchange_status_${r.status}${typeof body.error === "string" ? `_${body.error}` : ""}`);
     }
     const seconds = typeof body.expires_in === "number" ? body.expires_in : 300;
-    return { jwt: body.access_token, until: now() + seconds * 1000 - CACHE_MARGIN_MS };
+    return { jwt: body.access_token, until: Math.min(now() + seconds * 1000 - CACHE_MARGIN_MS, tokenExpMs) };
   }
 
-  async function resolve(token: string): Promise<Resolution> {
-    const parsed = parseJwt(token);
-    const kid = typeof parsed?.header.kid === "string" ? parsed.header.kid : undefined;
+  async function resolve(bearer: string): Promise<Resolution | null> {
+    const parsed = parseJwt(bearer);
+    if (parsed?.claims.iss !== config.issuer) return null;
+    const kid = typeof parsed.header.kid === "string" ? parsed.header.kid : undefined;
+    const h = sha256(bearer);
+    const hit = cache.get(h);
+    if (hit && hit.until > now()) {
+      remember(cache, h, hit); // a verified token's credential: no second signature check
+      return { ok: true, jwt: hit.jwt };
+    }
+    cache.delete(h);
     try {
+      if ((refused.get(h) ?? 0) > now()) throw new Refused("refused_cached");
       const reason = await invalidReason(parsed);
-      if (reason) {
-        log("warning", "oauth_token_rejected", { kid, reason });
-        return { ok: false, status: 401 };
-      }
-      const h = sha256(token);
-      const hit = cache.get(h);
-      if (hit && hit.until > now()) {
-        cache.delete(h);
-        cache.set(h, hit);
-        return { ok: true, jwt: hit.jwt };
-      }
-      cache.delete(h);
+      if (reason) throw new Refused(reason);
       let pending = inflight.get(h);
       if (!pending) {
-        pending = exchange(token).finally(() => inflight.delete(h));
+        const tokenExpMs = ((parsed.claims.exp as number) + SKEW_S) * 1000;
+        pending = exchange(bearer, tokenExpMs)
+          .then((fresh) => {
+            remember(cache, h, fresh);
+            log("info", "oauth_exchanged", { kid });
+            return fresh;
+          })
+          .catch((e) => {
+            if (e instanceof Refused) remember(refused, h, tokenExpMs);
+            throw e;
+          })
+          .finally(() => inflight.delete(h));
         inflight.set(h, pending);
       }
-      const fresh = await pending;
-      if (cache.size >= CACHE_MAX) cache.delete(cache.keys().next().value as string);
-      cache.set(h, fresh);
-      log("info", "oauth_exchanged", { kid });
-      return { ok: true, jwt: fresh.jwt };
+      return { ok: true, jwt: (await pending).jwt };
     } catch (e) {
       if (e instanceof Refused) {
         log("warning", "oauth_token_rejected", { kid, reason: e.message });
@@ -208,7 +228,7 @@ export function createOAuth(config: OAuthConfig, seams: { fetch?: typeof fetch; 
   }
 
   return {
-    config,
+    issuer: config.issuer,
     prmUrl,
     prm: JSON.stringify({
       resource: config.resource,
@@ -217,7 +237,6 @@ export function createOAuth(config: OAuthConfig, seams: { fetch?: typeof fetch; 
       bearer_methods_supported: ["header"],
       resource_name: "Relay",
     }),
-    owns: (bearer) => parseJwt(bearer)?.claims.iss === config.issuer,
     resolve,
   };
 }

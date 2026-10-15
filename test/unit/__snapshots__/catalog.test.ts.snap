@@ -1,6 +1,6 @@
 // Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
 
-exports[`catalog tools (F3) > A3 search_models(text-to-image) is unchanged from 0.1.5: no detail reads, no accepts field 1`] = `
+exports[`catalog tools (F3) > 0.1.7 A8 search_models(text-to-image): every row carries accepts, ["image"] only for schema-matched editors 1`] = `
 "Next: get_model(model) for its request schema and example.
 {
   "total": 5,
@@ -11,7 +11,8 @@ exports[`catalog tools (F3) > A3 search_models(text-to-image) is unchanged from 
       "tag": "text-to-image",
       "endpoint": "/v2/x/Qwen/qwen-image",
       "async_default": false,
-      "store_output_supported": true
+      "store_output_supported": true,
+      "accepts": []
     },
     {
       "name": "google/gemini-nano-banana-2.1",
@@ -19,7 +20,10 @@ exports[`catalog tools (F3) > A3 search_models(text-to-image) is unchanged from 
       "tag": "text-to-image",
       "endpoint": "/v2/x/google/gemini-nano-banana-2.1",
       "async_default": false,
-      "store_output_supported": true
+      "store_output_supported": true,
+      "accepts": [
+        "image"
+      ]
     },
     {
       "name": "openai/gpt-image-2",
@@ -27,7 +31,10 @@ exports[`catalog tools (F3) > A3 search_models(text-to-image) is unchanged from 
       "tag": "text-to-image",
       "endpoint": "/v2/x/openai/gpt-image-2",
       "async_default": false,
-      "store_output_supported": true
+      "store_output_supported": true,
+      "accepts": [
+        "image"
+      ]
     },
     {
       "name": "black-forest-labs/FLUX-2-pro",
@@ -35,7 +42,10 @@ exports[`catalog tools (F3) > A3 search_models(text-to-image) is unchanged from 
       "tag": "text-to-image",
       "endpoint": "/v2/x/black-forest-labs/FLUX-2-pro",
       "async_default": false,
-      "store_output_supported": true
+      "store_output_supported": true,
+      "accepts": [
+        "image"
+      ]
     },
     {
       "name": "broken/detail",
@@ -43,7 +53,8 @@ exports[`catalog tools (F3) > A3 search_models(text-to-image) is unchanged from 
       "tag": "text-to-image",
       "endpoint": "/v2/x/broken/detail",
       "async_default": false,
-      "store_output_supported": true
+      "store_output_supported": true,
+      "accepts": []
     }
   ]
 }"

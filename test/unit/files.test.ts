@@ -174,7 +174,7 @@ describe("upload_file (F6)", () => {
   };
   const slotOk: Route = { method: "POST", path: "/v2/files/slots", reply: { status: 201, json: slotReply } };
 
-  it("F1 slot: true mints a slot (retention, filename forwarded) and answers put_url, expires_at, curl, next", async () => {
+  it("F1 / 0.1.7 A5 slot: true mints a slot (retention, filename forwarded) and answers put_url, open_url, expires_at, curl, next", async () => {
     for (const transport of ["http", "stdio"] as const) {
       const m = mockFetch([slotOk, filesOk]);
       const s = await connect({ fetch: m.fetch, tools: filesTools, transport });
@@ -184,8 +184,9 @@ describe("upload_file (F6)", () => {
       expect(m.calls[0].path).toBe("/v2/files/slots");
       expect(m.calls[0].body).toEqual({ retention: "relay1d", filename: "photo.png" });
       expect(m.calls[0].headers.get("x-api-key")).toBe("relay_sk_unit_test_key");
-      expect(jsonOf(r)).toEqual({ put_url: slotReply.put_url, expires_at: slotReply.expires_at, curl: slotReply.curl, next: SLOT_NEXT });
-      expect(SLOT_NEXT).toBe("run the curl, then pass the returned url to run_model");
+      expect(jsonOf(r)).toEqual({ put_url: slotReply.put_url, open_url: slotReply.put_url, expires_at: slotReply.expires_at, curl: slotReply.curl, next: SLOT_NEXT });
+      expect(SLOT_NEXT).toBe("run the curl, or open open_url in a browser and pick the file; then pass the shown link to run_model");
+      expect(notesOf(r)).toContain("open open_url in a browser");
       await s.close();
     }
   });

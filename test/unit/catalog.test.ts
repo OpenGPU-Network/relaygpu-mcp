@@ -31,7 +31,7 @@ describe("catalog tools (F3)", () => {
     expect(r.isError).toBeFalsy();
     let body = json(r);
     expect(body.total).toBe(1);
-    expect(body.models[0]).toEqual({ name: KLING, display_name: "v3-T2V", tag: "text-to-video", endpoint: `/v2/x/${KLING}`, async_default: true, store_output_supported: true });
+    expect(body.models[0]).toEqual({ name: KLING, display_name: "v3-T2V", tag: "text-to-video", endpoint: `/v2/x/${KLING}`, async_default: true, store_output_supported: true, accepts: [] });
     r = await s.call("search_models", { query: "QWEN edit" });
     body = json(r);
     expect(body.models.map((x: { name: string }) => x.name)).toEqual(["Qwen/qwen-image-edit"]);
@@ -159,11 +159,18 @@ describe("catalog tools (F3)", () => {
     await s.close();
   });
 
-  it("A3 search_models(text-to-image) is unchanged from 0.1.5: no detail reads, no accepts field", async () => {
+  it("0.1.7 A8 search_models(text-to-image): every row carries accepts, [\"image\"] only for schema-matched editors", async () => {
     const m = editRoutes();
     const s = await connect({ fetch: m.fetch, tools: catalogTools, credential: null });
     const r = await s.call("search_models", { tag: "text-to-image" });
-    expect(m.calls.map((c) => c.path)).toEqual(["/v2/models"]);
+    const accepts = Object.fromEntries(json(r).models.map((x: { name: string; accepts: string[] }) => [x.name, x.accepts]));
+    expect(accepts).toEqual({
+      [QWEN]: [],
+      "google/gemini-nano-banana-2.1": ["image"],
+      "openai/gpt-image-2": ["image"],
+      "black-forest-labs/FLUX-2-pro": ["image"],
+      "broken/detail": [], // a detail that fails to load is no editor, never fatal
+    });
     expect(textOf(r)).toMatchSnapshot();
     await s.close();
   });

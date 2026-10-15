@@ -33,6 +33,8 @@ export interface ToolDef<S extends ZodRawShape = ZodRawShape> {
   description: string;
   /** zod raw shape; every field carries `.describe()`. */
   inputSchema: S;
+  /** Inputs only the stdio server lists: the hosted schema omits them, and one sent anyway still reaches the handler. */
+  localOnly?: (keyof S & string)[];
   annotations?: Omit<ToolAnnotations, "title">;
   /** Needs a credential: the server refuses it without one before the handler runs (zero requests). */
   billed?: boolean;

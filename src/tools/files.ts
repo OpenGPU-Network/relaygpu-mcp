@@ -22,7 +22,7 @@ export const HOSTED_PATH_REFUSAL =
   "Call upload_file(slot: true) instead and run the curl line it returns in your shell: it prints the link to pass to run_model. " +
   `(Or pass base64 ≤ ${mb(MAX_BASE64_BYTES)}, or url for a public link.)`;
 
-export const SLOT_NEXT = "run the curl, then pass the returned url to run_model";
+export const SLOT_NEXT = "run the curl, or open open_url in a browser and pick the file; then pass the shown link to run_model";
 
 /** `POST /v2/files/slots` as answered (only the fields upload_file passes on). */
 interface UploadSlot {
@@ -59,13 +59,16 @@ const upload_file = defineTool({
     slot: z
       .boolean()
       .optional()
-      .describe("true: get a single-use upload URL (10 minutes) and a curl line; run it in your shell on the local file and it prints the hosted file with its url."),
+      .describe(
+        "true: get a single-use upload URL (10 minutes): run the curl line in your shell on the local file, or open open_url in a browser and pick the file; either prints the hosted link.",
+      ),
     retention: z
       .string()
       .optional()
       .describe("How long the link lives: relay1h (default, free within a daily quota) or a media_storage SKU from get_pricing (relay1d, relay7d, …)."),
     filename: z.string().optional().describe("File name to record (defaults to the path's base name)."),
   },
+  localOnly: ["path"],
   annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: true },
   billed: true,
   async handler({ path, base64, url, slot, retention, filename }, ctx) {
@@ -76,8 +79,9 @@ const upload_file = defineTool({
 
     if (slot) {
       const s = await ctx.client().request<UploadSlot>("POST", "/v2/files/slots", { retention, filename }, { signal: ctx.signal });
-      return jsonResult({ put_url: s.put_url, expires_at: s.expires_at, curl: s.curl, next: SLOT_NEXT }, [
-        `Run the curl line in your shell with <file> replaced by the local path (single use, until ${s.expires_at}); it prints the file record: pass its url to run_model.`,
+      return jsonResult({ put_url: s.put_url, open_url: s.put_url, expires_at: s.expires_at, curl: s.curl, next: SLOT_NEXT }, [
+        `Single use, until ${s.expires_at}. With a shell: run the curl line with <file> replaced by the local path; it prints the file record. ` +
+          "Without one: open open_url in a browser, pick the file, and the page shows the link. Either way, pass that link to run_model.",
       ]);
     }
 

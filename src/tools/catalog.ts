@@ -1,15 +1,22 @@
 // Catalog tools (keyless): search_models, get_model, get_pricing, estimate_cost. Read through ctx.catalog only.
 import { z } from "zod";
 import type { ModelRow, UsageInput } from "@relaygpu/client";
-import { defineTool, jsonResult, type ToolContext, type ToolDef } from "../context.js";
+import { defineTool, errorResult, jsonResult, type ToolContext, type ToolDef } from "../context.js";
 
 const SEARCH_CAP = 50;
 const READ_ONLY = { readOnlyHint: true, idempotentHint: true, openWorldHint: true } as const;
+
+/** The one `mode` sentence (run_model's input, estimate_cost's usage). */
+export const MODE_SENTENCE =
+  "mode: direct (Relay's providers, the default) or opengpu (the decentralized network, priced separately).";
 
 /** The tag whose search also matches image-output models that take an input image (F2: editors by schema). */
 const EDIT_TAG = "image-to-image";
 /** Request properties that carry an input image: `image`, `images`, FLUX's `input_image` / `input_image_2…`. */
 const IMAGE_INPUT = /^(images?|input_image(_\d+)?)$/;
+
+/** A model's request-schema property names (none when the schema is absent). */
+export const schemaProps = (schema: unknown): string[] => Object.keys((schema as { properties?: object } | null)?.properties ?? {});
 
 /**
  * Image-output models (`*-to-image` tags) whose request schema takes an input image, read from the cached
@@ -20,14 +27,15 @@ async function imageEditors(ctx: ToolContext, rows: ModelRow[]): Promise<Set<str
   const details = await Promise.allSettled(candidates.map((r) => ctx.catalog.models.get(r.name)));
   const names = new Set<string>();
   details.forEach((d, i) => {
-    const props = d.status === "fulfilled" ? (d.value.request_schema as { properties?: object } | null)?.properties : undefined;
-    if (props && Object.keys(props).some((k) => IMAGE_INPUT.test(k))) names.add(candidates[i].name);
+    if (d.status === "fulfilled" && schemaProps(d.value.request_schema).some((k) => IMAGE_INPUT.test(k))) names.add(candidates[i].name);
   });
   return names;
 }
 
-/** The part of a pricing row's `model` after its `source.` prefix (`image.Qwen/qwen-image` → `Qwen/qwen-image`). */
+/** The part of a pricing row's `model` after its `source.` prefix (`image.openai/gpt-image-2` → `openai/gpt-image-2`). */
 const rowModel = (m: string) => m.slice(m.indexOf(".") + 1);
+/** A pricing row of `model`, named with or without its source prefix. */
+const rowOf = (model: string) => (r: { model: string }) => rowModel(r.model) === model || r.model === model;
 
 const search_models = defineTool({
   name: "search_models",
@@ -35,7 +43,8 @@ const search_models = defineTool({
   description:
     "Lists Relay models by tag and/or text. Common tags: text-to-image, image-to-image, text-to-video, image-to-video, " +
     "video-to-video, text-to-speech, speech-to-text, text-to-text, text-to-embedding. image-to-image also lists every " +
-    "image model that takes an input image (accepts: [\"image\"]). Returns name, tag and route per model (at most 50). " +
+    "image model that takes an input image. Returns name, tag, route and accepts (input media the model takes, e.g. " +
+    "[\"image\"]; [] for none) per model (at most 50). " +
     "Then call get_model with a name for its input schema.",
   inputSchema: {
     tag: z.string().optional().describe("Model type tag, e.g. text-to-image or image-to-video. Omit for every tag."),
@@ -46,11 +55,12 @@ const search_models = defineTool({
   },
   annotations: READ_ONLY,
   async handler({ tag, query }, ctx) {
-    let rows: (ModelRow & { accepts?: string[] })[];
+    let rows: ModelRow[];
+    let wideEditors: Set<string> | undefined;
     if (tag === EDIT_TAG) {
       const all = await ctx.catalog.models.list({ signal: ctx.signal });
-      const editors = await imageEditors(ctx, all);
-      rows = all.filter((r) => r.tag === EDIT_TAG || editors.has(r.name)).map((r) => (editors.has(r.name) ? { ...r, accepts: ["image"] } : r));
+      const editors = (wideEditors = await imageEditors(ctx, all));
+      rows = all.filter((r) => r.tag === EDIT_TAG || editors.has(r.name));
     } else {
       rows = await ctx.catalog.models.list({ tag: tag || undefined, signal: ctx.signal });
     }
@@ -59,14 +69,16 @@ const search_models = defineTool({
       const hay = `${r.name} ${r.display_name ?? ""} ${r.tag}`.toLowerCase();
       return words.every((w) => hay.includes(w));
     });
-    const models = matches.slice(0, SEARCH_CAP).map((r) => ({
+    const shown = matches.slice(0, SEARCH_CAP);
+    const editors = wideEditors ?? (await imageEditors(ctx, shown));
+    const models = shown.map((r) => ({
       name: r.name,
       display_name: r.display_name ?? null,
       tag: r.tag,
       endpoint: r.endpoint?.path ?? null,
       async_default: r.endpoint?.async_default ?? null,
       store_output_supported: r.store_output_supported,
-      accepts: r.accepts,
+      accepts: editors.has(r.name) ? ["image"] : [],
     }));
     const notes: string[] = [];
     if (matches.length > SEARCH_CAP) {
@@ -86,7 +98,7 @@ const get_model = defineTool({
     "Returns one model's route, request_schema (what run_model's input must follow), request_example, pricing and " +
     "availability. Then call run_model with an input shaped like request_example.",
   inputSchema: {
-    model: z.string().describe("Exact model name from search_models, e.g. Qwen/qwen-image."),
+    model: z.string().describe("Exact model name from search_models, e.g. google/gemini-nano-banana-2.1."),
   },
   annotations: READ_ONLY,
   async handler({ model }, ctx) {
@@ -122,12 +134,12 @@ const get_pricing = defineTool({
     "Returns Relay's public list prices (USD), optionally for one model, plus media_storage: the per-file fees of the " +
     "store_output / upload retention SKUs (relay1d, relay7d, …). Then estimate_cost for a number.",
   inputSchema: {
-    model: z.string().optional().describe("Model name (e.g. Qwen/qwen-image) to keep only its rows. Omit for every model."),
+    model: z.string().optional().describe("Model name (e.g. google/gemini-nano-banana-2.1) to keep only its rows. Omit for every model."),
   },
   annotations: READ_ONLY,
   async handler({ model }, ctx) {
     const p = await ctx.catalog.pricing.get({ signal: ctx.signal });
-    const rows = model ? p.pricing.filter((r) => rowModel(r.model) === model || r.model === model) : p.pricing;
+    const rows = model ? p.pricing.filter(rowOf(model)) : p.pricing;
     const notes: string[] = [];
     if (model && rows.length === 0) notes.push(`No pricing row for '${model}': check the name with search_models.`);
     notes.push(
@@ -141,7 +153,7 @@ const get_pricing = defineTool({
 
 const usageSchema = z
   .object({
-    mode: z.enum(["direct", "opengpu"]).optional().describe("Pricing mode; default direct."),
+    mode: z.enum(["direct", "opengpu"]).optional().describe(MODE_SENTENCE),
     input_tokens: z.number().optional().describe("per_token: prompt tokens."),
     output_tokens: z.number().optional().describe("per_token: completion tokens."),
     cached_input_tokens: z.number().optional().describe("per_token: cached-read tokens (a subset of input_tokens)."),
@@ -169,6 +181,31 @@ const usageSchema = z
   })
   .passthrough();
 
+/** The per-tier map a billing type reads `resolution_tier` from. */
+const TIER_MAP: Record<string, "per_image_resolution" | "per_second_video"> = {
+  per_image: "per_image_resolution",
+  per_image_plus_tokens: "per_image_resolution",
+  per_second_video: "per_second_video",
+};
+
+/**
+ * A `resolution_tier` the model's row does not price (a key, or a key's first `|` segment) is refused naming the keys;
+ * the SDK would otherwise fall back to the cheapest cell. Null when the tier is absent, priced, or the row has no map.
+ */
+async function tierRefusal(ctx: ToolContext, model: string, usage: UsageInput): Promise<string | null> {
+  const tier = usage.resolution_tier;
+  if (!tier) return null;
+  const mode = usage.mode ?? "direct";
+  const { pricing } = await ctx.catalog.pricing.get({ signal: ctx.signal });
+  const row = pricing.filter((r) => r.mode === mode).find(rowOf(model));
+  const field = row && TIER_MAP[row.billing_type];
+  const map = field ? (row as unknown as Record<string, unknown>)[field] : undefined;
+  if (!map || typeof map !== "object") return null;
+  const keys = Object.keys(map);
+  if (!keys.length || keys.some((k) => k === tier || k.split("|")[0] === tier)) return null;
+  return `resolution_tier "${tier}" is not priced for ${model}: the ${field} row's keys are ${keys.join(", ")}. Nothing was estimated.`;
+}
+
 const estimate_cost = defineTool({
   name: "estimate_cost",
   title: "Estimate a Relay cost",
@@ -185,6 +222,8 @@ const estimate_cost = defineTool({
   },
   annotations: READ_ONLY,
   async handler({ model, usage }, ctx) {
+    const refusal = await tierRefusal(ctx, model, usage as UsageInput);
+    if (refusal) return errorResult(refusal);
     const est = await ctx.catalog.estimateCost(model, usage as UsageInput);
     return jsonResult({ model, usd: est.usd, basis: est.basis }, ["Estimate only, not an invoice. Next: run_model to run it."]);
   },

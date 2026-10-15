@@ -4,6 +4,8 @@ import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 import type { TransportKind } from "./context.js";
 
 const DETAIL_MAX = 2_000;
+/** The statuses whose retry_after_seconds is advice to retry: never a 524/504, where the task may still run and bill. */
+const RETRY_STATUSES = new Set([429, 503]);
 
 /** What to set when a call needs a credential (or the one sent was refused). */
 export function credentialHint(transport: TransportKind): string {
@@ -42,7 +44,7 @@ export function errorText(e: unknown, transport: TransportKind): string {
     const state = (e.task as { status?: unknown } | null)?.status;
     if (typeof state === "string") lines.push(`task_status: ${state}`);
   }
-  if (e.retryAfter != null) lines.push(`retry_after_seconds: ${e.retryAfter}`);
+  if (e.retryAfter != null && RETRY_STATUSES.has(e.status ?? 0)) lines.push(`retry_after_seconds: ${e.retryAfter}`);
   const detail = detailText(e.detail);
   if (detail && detail !== e.message) lines.push(`detail: ${detail}`);
   if (e instanceof AuthenticationError) lines.push(credentialHint(transport));

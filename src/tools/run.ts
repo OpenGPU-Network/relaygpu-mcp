@@ -3,10 +3,31 @@ import { z } from "zod";
 import { isAccepted, type TaskStatus } from "@relaygpu/client";
 import { defineTool, type ToolDef } from "../context.js";
 import type { Store } from "../media.js";
+import { MODE_SENTENCE, schemaProps } from "./catalog.js";
 import { CHECK_WAIT_MAX_S, RUN_WAIT_MAX_S, asyncAnswer, doNotResubmit, failedError, stillRunning, waitOrCurrent, waitSecondsArg } from "./pending.js";
 
 export const DO_NOT_RESUBMIT = doNotResubmit("check_task");
 export const STILL_RUNNING = stillRunning("check_task");
+
+/** True when the model's request schema has an `async` property: its route can answer a 202 + task_id. */
+const takesAsync = (schema: unknown) => schemaProps(schema).includes("async");
+
+/** Fields run_model owns: a copy inside `input` is dropped (store_output, model) or set (async), with a note. */
+export const DROPPED_NOTE = (field: string) => `input.${field} was dropped: pass ${field} as run_model's own argument.`;
+export const ASYNC_NOTE = "input.async was replaced by async: true: run_model submits every model that takes async as a task.";
+
+/** The body run_model submits: `async: true` where the route takes it (D1), never a store_output/model copy. */
+export function submitBody(input: Record<string, unknown>, asyncRoute: boolean): { body: Record<string, unknown>; notes: string[] } {
+  const { store_output, model, ...body } = input;
+  const notes: string[] = [];
+  if (store_output !== undefined) notes.push(DROPPED_NOTE("store_output"));
+  if (model !== undefined) notes.push(DROPPED_NOTE("model"));
+  if (asyncRoute) {
+    if (body.async !== undefined && body.async !== true) notes.push(ASYNC_NOTE);
+    body.async = true;
+  }
+  return { body, notes };
+}
 
 const inlineImagesArg = z
   .boolean()
@@ -18,18 +39,31 @@ const run_model = defineTool({
   title: "Run a Relay model",
   description:
     "Runs any Relay model by name (billed to your key). input follows get_model's request_schema (request_example " +
-    `runs as is). Waits up to ${RUN_WAIT_MAX_S} s; past that it returns a task_id — do not resubmit, call check_task. Result links ` +
-    "expire 1 h after completion unless store_output names a media_storage SKU from get_pricing. Pass an " +
+    "runs as is). Every model whose schema takes async (image, video, audio) is submitted as a task: it waits up to " +
+    `${RUN_WAIT_MAX_S} s, past that it returns a task_id — do not resubmit, call check_task. Chat models answer inline. ` +
+    "Result links expire 1 h after completion unless store_output names a media_storage SKU from get_pricing. Pass an " +
     "idempotency_key if you may retry the same submit.",
   inputSchema: {
-    model: z.string().describe("Exact model name from search_models / get_model, e.g. Qwen/qwen-image."),
-    input: z.record(z.unknown()).describe("Request body per get_model's request_schema, without model (added for you). Pass media as *_url links (upload_file makes one)."),
+    model: z.string().describe("Exact model name from search_models / get_model, e.g. google/gemini-nano-banana-2.1."),
+    input: z
+      .record(z.unknown())
+      .describe(
+        "Request body per get_model's request_schema, without model, store_output or async (run_model sets them). " +
+          `Pass media as *_url links (upload_file makes one). ${MODE_SENTENCE}`,
+      ),
     store_output: z
       .string()
       .optional()
       .describe("Keep result media longer: a media_storage SKU from get_pricing (e.g. relay7d, adds its per-file fee), or provider (default, 1 h)."),
     wait_seconds: waitSecondsArg(RUN_WAIT_MAX_S, "returns the task_id at once"),
-    idempotency_key: z.string().optional().describe("Your key for this submit: a retry with the same key replays the first task instead of starting (and billing) a new one."),
+    idempotency_key: z
+      .string()
+      .optional()
+      .describe(
+        "Your key for this submit (task models; a chat answer is not replayed): a retry with the same key and the same input " +
+          "replays the first task instead of starting (and billing) a new one; the same key with a changed input is refused " +
+          "with 422 IDEMPOTENCY_KEY_REUSED.",
+      ),
     inline_images: inlineImagesArg,
   },
   annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: true },
@@ -42,15 +76,16 @@ const run_model = defineTool({
     const sku = store_output && store_output !== "provider" ? store_output : undefined;
     const store: Store = !sku ? "none" : forward ? "applied" : "unsupported";
     const media = { store, sku, inlineImages: inline_images };
+    const { body, notes } = submitBody(input, takesAsync(detail.request_schema));
 
     const client = ctx.client();
-    const res = await client.run(model, input, {
+    const res = await client.run(model, body, {
       wait: false,
       storeOutput: forward ? store_output : undefined,
       idempotencyKey: idempotency_key,
       signal: ctx.signal,
     });
-    if (!isAccepted(res)) return asyncAnswer(ctx, { status: "completed", id: {}, output: { body: res, ...media } });
+    if (!isAccepted(res)) return asyncAnswer(ctx, { status: "completed", id: {}, notes, output: { body: res, ...media } });
 
     const id = { task_id: res.task_id };
     const pending = (task?: TaskStatus) =>
@@ -58,7 +93,7 @@ const run_model = defineTool({
         status: task?.status ?? res.status ?? "queued",
         id,
         info: { poll_url: res.poll_url, elapsed_seconds: task?.elapsed_seconds, replayed: res.replayed },
-        notes: [`${DO_NOT_RESUBMIT}.`],
+        notes: [`${DO_NOT_RESUBMIT}.`, ...notes],
         next: "check_task",
       });
     const remaining = deadline - Date.now();
@@ -70,7 +105,7 @@ const run_model = defineTool({
     );
     if (task.status === "failed") throw failedError(res.task_id, task, "Task");
     if (task.status !== "completed") return pending(task);
-    return asyncAnswer(ctx, { status: "completed", id, output: { body: task.result ?? {}, ...media } });
+    return asyncAnswer(ctx, { status: "completed", id, info: { replayed: res.replayed || undefined }, notes, output: { body: task.result ?? {}, ...media } });
   },
 });
 

@@ -51,12 +51,20 @@ function callerClient(credential: Credential, baseUrl: string, catalog: Relay, f
   return client;
 }
 
-// Each tool's input object, built once per process (not per hosted request). An empty shape stays a raw shape: the
-// MCP SDK's own empty object lists without `additionalProperties`, as before.
-const inputObjects = new WeakMap<ToolDef, ZodObject<ZodRawShape> | ZodRawShape>();
-function inputObject(tool: ToolDef): ZodObject<ZodRawShape> | ZodRawShape {
-  let o = inputObjects.get(tool);
-  if (!o) inputObjects.set(tool, (o = Object.keys(tool.inputSchema).length ? z.object(tool.inputSchema) : tool.inputSchema));
+// Each tool's input object per transport, built once per process (not per hosted request). An empty shape stays a raw
+// shape: the MCP SDK's own empty object lists without `additionalProperties`, as before. On the hosted server a tool's
+// `localOnly` inputs are left out of the listed shape and passed through, so the handler's own refusal still answers them.
+type InputObject = ZodObject<ZodRawShape> | ZodRawShape;
+const inputObjects: Record<TransportKind, WeakMap<ToolDef, InputObject>> = { stdio: new WeakMap(), http: new WeakMap() };
+function buildInput(tool: ToolDef, transport: TransportKind): InputObject {
+  const hidden: string[] = transport === "http" ? (tool.localOnly ?? []) : [];
+  if (!hidden.length) return Object.keys(tool.inputSchema).length ? z.object(tool.inputSchema) : tool.inputSchema;
+  return z.object(Object.fromEntries(Object.entries(tool.inputSchema).filter(([k]) => !hidden.includes(k)))).passthrough();
+}
+function inputObject(tool: ToolDef, transport: TransportKind): InputObject {
+  const cache = inputObjects[transport];
+  let o = cache.get(tool);
+  if (!o) cache.set(tool, (o = buildInput(tool, transport)));
   return o;
 }
 
@@ -90,7 +98,7 @@ export function createRelayMcpServer(opts: ServerOptions): McpServer {
       {
         title: tool.title,
         description: tool.billed ? tool.description + BILLED_NOTE : tool.description,
-        inputSchema: inputObject(tool),
+        inputSchema: inputObject(tool, opts.transport),
         annotations: { title: tool.title, ...tool.annotations },
       },
       async (args: Record<string, unknown>, extra: { signal: AbortSignal }) => {

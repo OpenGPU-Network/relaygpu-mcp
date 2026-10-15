@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.1.7 — 2026-10-15
+- `run_model` submits `async: true` to every model whose request schema has an `async` property (image, video, audio), long-polls up to `wait_seconds` and past it answers the `task_id` with `next: check_task`. A slow image run no longer ends in an edge 524 with the result lost and the charge real. A caller's `async` in `input` is replaced, with a note. Chat models (no `async` in their schema) are sent unchanged and answer inline. A completed replay carries `replayed: true`.
+- `run_model` text: the description and `idempotency_key` hold for every route; the same key with a changed input is refused `422 IDEMPOTENCY_KEY_REUSED`. `store_output` and `model` are tool arguments only: a copy inside `input` is dropped and the answer notes it. `mode` is one sentence on `run_model` and `estimate_cost`.
+- Errors print `retry_after_seconds` only on 429 and 503, never on a 524 or 504.
+- `upload_file({slot: true})` answers `open_url` (the same URL as `put_url`); `next` names both roads: run the curl, or open `open_url` in a browser and pick the file. The hosted server's `upload_file` schema no longer lists `path` (a `path` sent anyway still gets the refusal); the stdio schema keeps it.
+- `estimate_cost` refuses a `resolution_tier` the model's `per_image_resolution` / `per_second_video` row does not price, naming the row's keys, instead of falling back to the cheapest cell.
+- `search_models`: every row carries `accepts` (`["image"]` for image models whose schema takes an input image, `[]` otherwise). No tool text names a retired model: the examples use `google/gemini-nano-banana-2.1`.
+- README: the claude.ai / Claude Desktop / ChatGPT row of "Local files" is the browser upload page; long image runs return a `task_id`, never a 524.
+
 ## 0.1.6 — 2026-10-15
 - `upload_file({slot: true})` (optional `retention`, `filename`): mints a single-use upload slot (`POST /v2/files/slots`) and answers `{put_url, expires_at, curl, next}`; running the `curl` line in a shell uploads the local file with no key there and prints its `url`. This is how an agent on the hosted server (OAuth included) gets a local file to Relay. The hosted refusal of `upload_file(path)` now names `slot: true`. The stdio server accepts `slot` too; `path` is unchanged.
 - `search_models({tag: "image-to-image"})` also lists every image-output model whose request schema takes an input image (`image`, `images`, `input_image…`: the Gemini image models, gpt-image-1.5-I2I, gpt-image-2 and its 2.5 variants, FLUX-2-pro, Seedream, Wan 2.7 Image), each row with `accepts: ["image"]`. Other tags are unchanged.

@@ -226,6 +226,70 @@ describe("run_model (F4, F5)", () => {
   });
 });
 
+describe("Relay's own links first (F3)", () => {
+  const GEMINI = "google/gemini-nano-banana-2.1";
+  const GEMINI_ROUTE = "/v2/image/gemini-3/generate";
+  const CDN = "https://cdn.relaygpu.test/f/gem1.png";
+  const png = pngBytes(500);
+  const geminiDetail: Route = { method: "GET", path: modelPath(GEMINI), reply: { json: modelDetail(GEMINI, { endpoint: { path: GEMINI_ROUTE } }) } };
+  const filesOk: Route = { method: "POST", path: "/v2/files", reply: { status: 201, json: fileResponse() } };
+
+  it("A4 a Gemini result with urls answers Relay's links and makes no upload of its own", async () => {
+    const m = mockFetch([geminiDetail, { method: "POST", path: GEMINI_ROUTE, reply: { json: { images: [b64(png)], urls: [CDN], model: GEMINI } } }, filesOk]);
+    const s = await connect({ fetch: m.fetch, tools: runTools, transport: "http" });
+    const r = await s.call("run_model", { model: GEMINI, input: { prompt: "make the shirt red", image: "https://cdn.relaygpu.test/f/in.png" } });
+    expect(r.isError).toBeFalsy();
+    expect(posts(m.calls, "/v2/files")).toHaveLength(0);
+    const body = jsonOf(r);
+    expect(body.output.urls).toEqual([CDN]);
+    expect(body.output.images).toEqual([CDN]);
+    expect(body.rehosted).toBeUndefined();
+    expect(JSON.stringify(r)).not.toContain(b64(png).slice(0, 40));
+    expect(notesOf(r)).toContain(`${CDN}: ${EXPIRY_NOTE}`);
+    await s.close();
+  });
+
+  it("A4 store_output relay7d on a Relay-hosting lane is forwarded and the links are labelled stored", async () => {
+    const m = mockFetch([geminiDetail, { method: "POST", path: GEMINI_ROUTE, reply: { json: { images: [b64(png)], urls: [CDN] } } }, filesOk]);
+    const s = await connect({ fetch: m.fetch, tools: runTools });
+    const r = await s.call("run_model", { model: GEMINI, input: { prompt: "x" }, store_output: "relay7d" });
+    expect((posts(m.calls, GEMINI_ROUTE)[0].body as Record<string, unknown>).store_output).toBe("relay7d");
+    expect(posts(m.calls, "/v2/files")).toHaveLength(0);
+    expect(notesOf(r)).toContain(`${CDN}: stored as relay7d`);
+    await s.close();
+  });
+
+  it("A4 an entry without its link (urls null or short) is still re-hosted", async () => {
+    const m = mockFetch([geminiDetail, { method: "POST", path: GEMINI_ROUTE, reply: { json: { images: [b64(png), b64(pngBytes(600))], urls: [CDN, null] } } }, filesOk]);
+    const s = await connect({ fetch: m.fetch, tools: runTools });
+    const r = await s.call("run_model", { model: GEMINI, input: { prompt: "x" } });
+    expect(posts(m.calls, "/v2/files")).toHaveLength(1);
+    expect(jsonOf(r).output.images).toEqual([CDN, fileResponse().url]);
+    await s.close();
+  });
+
+  it("A4 check_task without a credential returns Relay's links (no re-host needed)", async () => {
+    const m = mockFetch([{ method: "GET", path: /^\/v2\/tasks\//, reply: { json: { status: "completed", result: { images: [b64(png)], urls: [CDN] } } } }]);
+    const s = await connect({ fetch: m.fetch, tools: runTools, credential: null });
+    const r = await s.call("check_task", { task_id: TASK, wait_seconds: 0 });
+    expect(r.isError).toBeFalsy();
+    expect(jsonOf(r).output.images).toEqual([CDN]);
+    expect(notesOf(r)).not.toContain("omitted");
+    await s.close();
+  });
+
+  it("A4 a Kling video result keeps today's handling (its link, no upload)", async () => {
+    const video = "https://cdn.provider.test/out/v.mp4";
+    const m = mockFetch([klingDetail, accepted, taskRoute({ status: "completed", result: { video_url: video } }), filesOk]);
+    const s = await connect({ fetch: m.fetch, tools: runTools });
+    const r = await s.call("run_model", { model: KLING, input: { prompt: "a cat" } });
+    expect(jsonOf(r).output).toEqual({ video_url: video });
+    expect(posts(m.calls, "/v2/files")).toHaveLength(0);
+    expect(notesOf(r)).toContain(`${video}: ${EXPIRY_NOTE}`);
+    await s.close();
+  });
+});
+
 describe("check_task (F3)", () => {
   it("A3 check_task completed returns the result", async () => {
     const m = mockFetch([taskRoute({ task_id: TASK, status: "completed", result: { video_url: "https://cdn.provider.test/v.mp4" } })]);

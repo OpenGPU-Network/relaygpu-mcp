@@ -1,4 +1,5 @@
-// upload_file: a local path (stdio only, streamed), base64 (≤ 4 MB) or a public URL → a Relay-hosted link.
+// upload_file: a local path (stdio only, streamed), base64 (≤ 4 MB) or a public URL → a Relay-hosted link; or a slot
+// (`POST /v2/files/slots`): a single-use put_url the caller's own shell uploads to with curl, no key needed there.
 // The media type comes from a data: URI's declared type, else the SDK sniffs the first bytes.
 import { Buffer } from "node:buffer";
 import * as fs from "node:fs";
@@ -17,7 +18,18 @@ export const MAX_BASE64_BYTES = 4 * MB;
 const mb = (n: number) => `${n / MB} MB`;
 
 export const HOSTED_PATH_REFUSAL =
-  `upload_file(path) works only on the local (stdio) server: this hosted server cannot read your disk. Pass base64 (≤ ${mb(MAX_BASE64_BYTES)}) or url instead.`;
+  "upload_file(path) works only on the local (stdio) server: this hosted server cannot read your disk. " +
+  "Call upload_file(slot: true) instead and run the curl line it returns in your shell: it prints the link to pass to run_model. " +
+  `(Or pass base64 ≤ ${mb(MAX_BASE64_BYTES)}, or url for a public link.)`;
+
+export const SLOT_NEXT = "run the curl, then pass the returned url to run_model";
+
+/** `POST /v2/files/slots` as answered (only the fields upload_file passes on). */
+interface UploadSlot {
+  put_url: string;
+  expires_at: string;
+  curl: string;
+}
 
 type OpenAsBlob = (path: string) => Promise<Blob>;
 
@@ -44,6 +56,10 @@ const upload_file = defineTool({
     path: z.string().optional().describe(`Local file path (stdio server only; the hosted server cannot read your disk). Max ${mb(MAX_UPLOAD_BYTES)}.`),
     base64: z.string().optional().describe(`File content as base64 or a data: URI, at most ${mb(MAX_BASE64_BYTES)} decoded. Larger files: pass url.`),
     url: z.string().optional().describe("Public http(s) link to copy onto Relay."),
+    slot: z
+      .boolean()
+      .optional()
+      .describe("true: get a single-use upload URL (10 minutes) and a curl line; run it in your shell on the local file and it prints the hosted file with its url."),
     retention: z
       .string()
       .optional()
@@ -52,9 +68,18 @@ const upload_file = defineTool({
   },
   annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: true },
   billed: true,
-  async handler({ path, base64, url, retention, filename }, ctx) {
-    if ([path, base64, url].filter((v) => v != null && v !== "").length !== 1) return errorResult("upload_file takes exactly one of path, base64 or url.");
+  async handler({ path, base64, url, slot, retention, filename }, ctx) {
+    if ([path, base64, url, slot || undefined].filter((v) => v != null && v !== "").length !== 1) {
+      return errorResult("upload_file takes exactly one of path, base64, url or slot: true.");
+    }
     const opts = { retention, filename, signal: ctx.signal };
+
+    if (slot) {
+      const s = await ctx.client().request<UploadSlot>("POST", "/v2/files/slots", { retention, filename }, { signal: ctx.signal });
+      return jsonResult({ put_url: s.put_url, expires_at: s.expires_at, curl: s.curl, next: SLOT_NEXT }, [
+        `Run the curl line in your shell with <file> replaced by the local path (single use, until ${s.expires_at}); it prints the file record: pass its url to run_model.`,
+      ]);
+    }
 
     if (url) return done(await ctx.client().files.copy(url, opts));
 

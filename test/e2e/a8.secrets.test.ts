@@ -3,7 +3,7 @@
 // stdio stdout + stderr bytes (raw driver, LOG_LEVEL=debug). Asserts are boolean so a failure can never print the key.
 // Not billed: the key is refused at auth time.
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { BASE_URL, BUDGET_ZERO_KEY, HAS_BASE, QWEN, hostedChild, mcpHttp, rawStdio, textOf } from "./harness.js";
+import { BASE_URL, BUDGET_ZERO_KEY, HAS_BASE, IMAGE_RUN, hostedChild, mcpHttp, rawStdio, textOf } from "./harness.js";
 
 const leaks = (s: string) => s.includes(BUDGET_ZERO_KEY);
 
@@ -22,7 +22,7 @@ describe.skipIf(!HAS_BASE || !BUDGET_ZERO_KEY)("A8 budget-zero key", () => {
     let text = "";
     let isError: boolean | undefined;
     try {
-      const r = await mcp.call("run_model", QWEN);
+      const r = await mcp.call("run_model", IMAGE_RUN);
       isError = r.isError;
       text = textOf(r);
     } finally {
@@ -38,7 +38,7 @@ describe.skipIf(!HAS_BASE || !BUDGET_ZERO_KEY)("A8 budget-zero key", () => {
 
   it("A8 stdio: KEY_BUDGET_EXHAUSTED with requestId, key absent from stdout and stderr", async () => {
     const run = await rawStdio({ RELAY_API_KEY: BUDGET_ZERO_KEY, RELAY_BASE_URL: BASE_URL, LOG_LEVEL: "debug" }, [
-      { method: "tools/call", params: { name: "run_model", arguments: QWEN } },
+      { method: "tools/call", params: { name: "run_model", arguments: IMAGE_RUN } },
     ]);
     const result = run.responses.get(2)?.result as { isError?: boolean; content?: { type: string; text?: string }[] } | undefined;
     const text = (result?.content ?? []).map((c) => c.text ?? "").join("\n");

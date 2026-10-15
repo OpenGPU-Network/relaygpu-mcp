@@ -2,7 +2,7 @@ import { mkdtemp, rm, truncate, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { filesTools, HOSTED_PATH_REFUSAL } from "../../src/tools/files.js";
+import { filesTools, HOSTED_PATH_REFUSAL, SLOT_NEXT } from "../../src/tools/files.js";
 import { connect, mockFetch, posts, textOf, type Route } from "../helpers/harness.js";
 import { b64, fileResponse, jsonOf, notesOf, pngBytes, wavBytes } from "../fixtures/relay.js";
 
@@ -44,6 +44,16 @@ describe("upload_file (F6)", () => {
     await s.close();
   });
 
+  it("A2 path on the hosted server is refused naming slot: true (zero POSTs)", async () => {
+    const m = mockFetch([filesOk]);
+    const s = await connect({ fetch: m.fetch, tools: filesTools, transport: "http" });
+    const r = await s.call("upload_file", { path: "/tmp/x.png" });
+    expect(r.isError).toBe(true);
+    expect(textOf(r)).toContain("upload_file(slot: true)");
+    expect(m.calls).toHaveLength(0);
+    await s.close();
+  });
+
   it("A5 path on the hosted server is refused naming base64 and url (zero POSTs)", async () => {
     const m = mockFetch([filesOk]);
     const s = await connect({ fetch: m.fetch, tools: filesTools, transport: "http" });
@@ -75,7 +85,7 @@ describe("upload_file (F6)", () => {
     for (const args of [{}, { url: "https://x.test/a.png", base64: b64(pngBytes(10)) }]) {
       const r = await s.call("upload_file", args);
       expect(r.isError).toBe(true);
-      expect(textOf(r)).toContain("exactly one of path, base64 or url");
+      expect(textOf(r)).toContain("exactly one of path, base64, url or slot: true");
     }
     expect(m.calls).toHaveLength(0);
     await s.close();
@@ -153,5 +163,60 @@ describe("upload_file (F6)", () => {
     } finally {
       await rm(dir, { recursive: true, force: true });
     }
+  });
+
+  const slotReply = {
+    slot_id: "slot_1",
+    put_url: "https://relay.test/v2/files/slots/tok123",
+    expires_at: "2026-10-15T09:24:02Z",
+    retention: "relay1d",
+    curl: "curl -T <file> https://relay.test/v2/files/slots/tok123",
+  };
+  const slotOk: Route = { method: "POST", path: "/v2/files/slots", reply: { status: 201, json: slotReply } };
+
+  it("F1 slot: true mints a slot (retention, filename forwarded) and answers put_url, expires_at, curl, next", async () => {
+    for (const transport of ["http", "stdio"] as const) {
+      const m = mockFetch([slotOk, filesOk]);
+      const s = await connect({ fetch: m.fetch, tools: filesTools, transport });
+      const r = await s.call("upload_file", { slot: true, retention: "relay1d", filename: "photo.png" });
+      expect(r.isError).toBeFalsy();
+      expect(m.calls).toHaveLength(1);
+      expect(m.calls[0].path).toBe("/v2/files/slots");
+      expect(m.calls[0].body).toEqual({ retention: "relay1d", filename: "photo.png" });
+      expect(m.calls[0].headers.get("x-api-key")).toBe("relay_sk_unit_test_key");
+      expect(jsonOf(r)).toEqual({ put_url: slotReply.put_url, expires_at: slotReply.expires_at, curl: slotReply.curl, next: SLOT_NEXT });
+      expect(SLOT_NEXT).toBe("run the curl, then pass the returned url to run_model");
+      await s.close();
+    }
+  });
+
+  it("F1 slot without retention/filename sends an empty body", async () => {
+    const m = mockFetch([slotOk]);
+    const s = await connect({ fetch: m.fetch, tools: filesTools, transport: "http" });
+    await s.call("upload_file", { slot: true });
+    expect(m.calls[0].body).toEqual({});
+    await s.close();
+  });
+
+  it("F1 slot is exclusive with path/base64/url; slot: false counts as absent (zero POSTs)", async () => {
+    const m = mockFetch([slotOk, filesOk]);
+    const s = await connect({ fetch: m.fetch, tools: filesTools, transport: "http" });
+    for (const args of [{ slot: true, url: "https://x.test/a.png" }, { slot: true, path: wavPath }, { slot: false }]) {
+      const r = await s.call("upload_file", args);
+      expect(r.isError).toBe(true);
+      expect(textOf(r)).toContain("exactly one of path, base64, url or slot: true");
+    }
+    expect(m.calls).toHaveLength(0);
+    await s.close();
+  });
+
+  it("F1 slot without a credential: MISSING_CREDENTIALS and zero POSTs", async () => {
+    const m = mockFetch([slotOk]);
+    const s = await connect({ fetch: m.fetch, tools: filesTools, transport: "http", credential: null });
+    const r = await s.call("upload_file", { slot: true });
+    expect(r.isError).toBe(true);
+    expect(textOf(r)).toContain("MISSING_CREDENTIALS");
+    expect(m.calls).toHaveLength(0);
+    await s.close();
   });
 });

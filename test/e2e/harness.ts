@@ -31,8 +31,8 @@ export const TOOL_NAMES = [
   "list_workflows", "run_workflow", "check_workflow_run", "cancel_workflow_run", "get_credits", "get_usage", "search_docs",
 ].sort();
 
-/** Inputs pinned against the staging catalog (GET /v2/models/{model} request_schema, 2026-10-06). */
-export const QWEN = { model: "Qwen/qwen-image", input: { prompt: "a red fox", size: "512x512" } };
+/** Inputs pinned against the staging catalog (GET /v2/models/{model} request_schema; Qwen/qwen-image retired 2026-10-13, Wan 2.7 Image Pro since 2026-10-15). */
+export const IMAGE_RUN = { model: "Wan-AI/Wan2.7-Image-Pro", input: { prompt: "a red fox", size: "1K" } };
 
 /** A long tool call (run_model waits up to 45 s) must outlive the SDK's 60 s default request timeout. */
 const CALL_OPTS = { timeout: 180_000 };

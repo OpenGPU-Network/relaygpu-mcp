@@ -99,4 +99,83 @@ describe("catalog tools (F3)", () => {
     expect(textOf(r)).toContain("not an invoice");
     await s.close();
   });
+
+  const schema = (...props: string[]) => ({ type: "object", properties: Object.fromEntries(["prompt", ...props].map((p) => [p, { type: "string" }])) });
+  const EDIT_CATALOG = {
+    auto: {
+      image: [
+        row(QWEN, "text-to-image"),
+        row("google/gemini-nano-banana-2.1", "text-to-image"),
+        row("openai/gpt-image-2", "text-to-image"),
+        row("black-forest-labs/FLUX-2-pro", "text-to-image"),
+        row("Qwen/qwen-image-edit", "image-to-image"),
+        row("broken/detail", "text-to-image"),
+      ],
+      video: [row("KlingTeam/v3-I2V", "image-to-video")],
+    },
+    model_restrictions_per_tier: {},
+  };
+  const SCHEMAS: Record<string, unknown> = {
+    [QWEN]: schema("size"),
+    "google/gemini-nano-banana-2.1": schema("image", "images"),
+    "openai/gpt-image-2": schema("image"),
+    "black-forest-labs/FLUX-2-pro": schema("input_image", "input_image_2"),
+    "Qwen/qwen-image-edit": schema("image"),
+    "KlingTeam/v3-I2V": schema("image"),
+  };
+  const editRoutes = () =>
+    mockFetch([
+      { method: "GET", path: "/v2/models", reply: { json: EDIT_CATALOG } },
+      { method: "GET", path: modelPath("broken/detail"), reply: apiError(500, "INTERNAL_ERROR", "boom") },
+      {
+        method: "GET",
+        path: /^\/v2\/models\//,
+        reply: (c) => {
+          const name = decodeURIComponent(c.path.slice("/v2/models/".length));
+          return { json: modelDetail(name, { request_schema: SCHEMAS[name] }) };
+        },
+      },
+    ]);
+
+  it("A3 search_models(image-to-image) adds image-output models whose schema takes image/images/input_image, each accepts: [image]", async () => {
+    const m = editRoutes();
+    const s = await connect({ fetch: m.fetch, tools: catalogTools, credential: null });
+    const r = await s.call("search_models", { tag: "image-to-image" });
+    expect(r.isError).toBeFalsy();
+    const body = json(r);
+    expect(body.models.map((x: { name: string }) => x.name)).toEqual([
+      "google/gemini-nano-banana-2.1",
+      "openai/gpt-image-2",
+      "black-forest-labs/FLUX-2-pro",
+      "Qwen/qwen-image-edit",
+    ]);
+    for (const x of body.models) expect(x.accepts).toEqual(["image"]);
+    // Tags are reported as registered; a video model taking an image is not an image editor.
+    expect(body.models[0].tag).toBe("text-to-image");
+    expect(m.calls.some((c) => c.path === modelPath("KlingTeam/v3-I2V"))).toBe(false);
+    // A query still narrows the widened set.
+    const q = json(await s.call("search_models", { tag: "image-to-image", query: "gemini" }));
+    expect(q.models.map((x: { name: string }) => x.name)).toEqual(["google/gemini-nano-banana-2.1"]);
+    await s.close();
+  });
+
+  it("A3 search_models(text-to-image) is unchanged from 0.1.5: no detail reads, no accepts field", async () => {
+    const m = editRoutes();
+    const s = await connect({ fetch: m.fetch, tools: catalogTools, credential: null });
+    const r = await s.call("search_models", { tag: "text-to-image" });
+    expect(m.calls.map((c) => c.path)).toEqual(["/v2/models"]);
+    expect(textOf(r)).toMatchSnapshot();
+    await s.close();
+  });
+
+  it("F5 estimate_cost duration_seconds names the input video's length for edits", async () => {
+    const m = mockFetch([]);
+    const s = await connect({ fetch: m.fetch, tools: catalogTools, credential: null });
+    const { tools } = await s.client.listTools();
+    const usage = tools.find((t) => t.name === "estimate_cost")!.inputSchema.properties!.usage as { properties: Record<string, { description: string }> };
+    expect(usage.properties.duration_seconds.description).toContain(
+      "seconds of output; for an edit of an input video (Kling Omni/o1 base_video_url, Motion Control) pass the input video's length, which is what is rendered and billed",
+    );
+    await s.close();
+  });
 });

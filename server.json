@@ -8,13 +8,13 @@
   "icons": [
     { "src": "https://raw.githubusercontent.com/OpenGPU-Network/relaygpu-mcp/main/mcpb/icon.png", "mimeType": "image/png", "sizes": ["512x512"] }
   ],
-  "version": "0.1.5",
+  "version": "0.1.6",
   "packages": [
     {
       "registryType": "npm",
       "registryBaseUrl": "https://registry.npmjs.org",
       "identifier": "@relaygpu/mcp",
-      "version": "0.1.5",
+      "version": "0.1.6",
       "transport": { "type": "stdio" },
       "environmentVariables": [
         { "name": "RELAY_API_KEY", "description": "Your Relay API key (relay_sk_...) from dashboard.relaygpu.com/keys.", "isRequired": true, "isSecret": true, "format": "string" }

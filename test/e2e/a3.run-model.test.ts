@@ -2,7 +2,7 @@
 // check_task loops to the result; unknown and retired models fail with their codes. Billed: one image, one 3 s std video.
 // The "zero POSTs before the refusal" half of A3 is fixture-pinned in the unit suite, not provable here.
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { API_KEY, BASE_URL, EXPIRY_NOTE, HAS_KEY, QWEN, RESUBMIT_NOTE, URL_RE, fieldOf, mcpHttp, startHosted, textOf, type McpHandle } from "./harness.js";
+import { API_KEY, BASE_URL, EXPIRY_NOTE, HAS_KEY, IMAGE_RUN, RESUBMIT_NOTE, URL_RE, fieldOf, mcpHttp, startHosted, textOf, type McpHandle } from "./harness.js";
 
 const KLING = {
   model: "KlingTeam/v3-T2V",
@@ -24,8 +24,8 @@ describe.skipIf(!HAS_KEY)("A3 run_model", () => {
     await hosted?.close();
   });
 
-  it("A3 Qwen/qwen-image returns an image URL with the expiry note (1 billed image)", async () => {
-    const r = await mcp.call("run_model", QWEN);
+  it("A3 Wan-AI/Wan2.7-Image-Pro returns an image URL with the expiry note (1 billed image)", async () => {
+    const r = await mcp.call("run_model", IMAGE_RUN);
     expect(r.isError, textOf(r)).toBeFalsy();
     expect(textOf(r)).toMatch(URL_RE);
     expect(textOf(r)).toContain(EXPIRY_NOTE);

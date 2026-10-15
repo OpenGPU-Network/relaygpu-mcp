@@ -1,6 +1,7 @@
 // D7 media-out formatting, shared by run_model, check_task, run_workflow and check_workflow_run (through the
-// answer envelope in tools/pending.ts). Result links keep their expiry; base64 media is re-hosted through /v2/files
-// and never reaches a tool result; MCP image blocks only on request and only for images ≤ 1 MB.
+// answer envelope in tools/pending.ts). Result links keep their expiry; base64 media Relay already hosts (`urls` /
+// `url` beside `images` / `image`) is replaced by Relay's own links, any other base64 media is re-hosted through
+// /v2/files; base64 never reaches a tool result; MCP image blocks only on request and only for images ≤ 1 MB.
 import { Buffer } from "node:buffer";
 import type { ImageContent } from "@modelcontextprotocol/sdk/types.js";
 import type { ToolContext } from "./context.js";
@@ -174,6 +175,22 @@ class Slot {
   constructor(readonly raw: string) {}
 }
 
+/**
+ * Relay's own links first (F3): an object carrying `urls` beside `images` (or `url` beside `image`) gets each base64
+ * entry replaced by the link at its index, so the walk finds links there and re-hosts nothing. An entry without its
+ * link keeps its base64 (re-hosted as before). Returns the object itself when nothing is replaced.
+ */
+function withRelayLinks(v: Record<string, unknown>): Record<string, unknown> {
+  const link = (u: unknown) => (typeof u === "string" && HTTP_URL.test(u) ? u : null);
+  let out: Record<string, unknown> = v;
+  const { images, urls } = v;
+  if (Array.isArray(images) && Array.isArray(urls) && images.some((img, i) => typeof img === "string" && link(urls[i]))) {
+    out = { ...v, images: images.map((img, i) => (typeof img === "string" && link(urls[i])) || img) };
+  }
+  if (typeof v.image === "string" && link(v.url)) out = { ...out, image: v.url };
+  return out;
+}
+
 /** Formats a model output (sync body, task result or run output): URLs with expiry notes, base64 re-hosted, never inlined unless asked. */
 export async function formatResult(body: unknown, opts: MediaOptions): Promise<Formatted> {
   const { ctx } = opts;
@@ -209,8 +226,9 @@ export async function formatResult(body: unknown, opts: MediaOptions): Promise<F
       return out ?? v;
     }
     if (isPlainObject(v)) {
-      for (const k of Object.keys(v)) visit(v[k], k, k, () => ({ ...v }));
-      return out ?? v;
+      const o = withRelayLinks(v);
+      for (const k of Object.keys(o)) visit(o[k], k, k, () => ({ ...o }));
+      return out ?? o;
     }
     return v;
   };

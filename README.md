@@ -121,13 +121,13 @@ Tools marked *keyless* work without a credential on the local server. The others
 
 | Tool | What it does | Example |
 |---|---|---|
-| `search_models` *keyless* | Find models by tag and/or text | "Find a text-to-video model from Kling" → `{tag: "text-to-video", query: "kling"}` |
+| `search_models` *keyless* | Find models by tag and/or text; `image-to-image` also lists every image model that takes an input image (`accepts: ["image"]`) | "Find a text-to-video model from Kling" → `{tag: "text-to-video", query: "kling"}` |
 | `get_model` *keyless* | Route, request schema, example, pricing and status of one model | `{model: "Qwen/qwen-image"}` |
 | `get_pricing` *keyless* | Public prices for one model or all of them, including the `media_storage` SKUs | `{model: "KlingTeam/v3-T2V"}` |
 | `estimate_cost` *keyless* | Estimate from the public price list (not an invoice) | `{model: "KlingTeam/v3-T2V", usage: {duration_seconds: 5, quality_mode: "std"}}` |
 | `run_model` | Run any model by name and wait up to 45 s | `{model: "Qwen/qwen-image", input: {prompt: "a red fox", size: "512x512"}}` |
 | `check_task` *keyless* | Poll a task (waits up to 30 s) | `{task_id: "direct:…", wait_seconds: 30}` |
-| `upload_file` | Host a file and get a URL for any `*_url` input | `{path: "./clip.mp4", retention: "relay1d"}` |
+| `upload_file` | Host a file and get a URL for any `*_url` input (or an image editor's `image`), or a one-time upload slot for a local file on the hosted server | `{path: "./clip.mp4", retention: "relay1d"}` · `{slot: true}` |
 | `list_workflows` | List the workflow templates | "Which workflows can I run?" |
 | `run_workflow` | Start a workflow run, wait up to 45 s | `{workflow_id: "script-voiceover", inputs: {messages: [{role: "user", content: "a lighthouse at dusk"}], voice: "Cherry"}}` |
 | `check_workflow_run` *keyless* | Poll a run (waits up to 30 s) | `{run_id: "…", wait_seconds: 30}` |
@@ -136,13 +136,25 @@ Tools marked *keyless* work without a credential on the local server. The others
 | `get_usage` | Usage analytics (JWT or custom-tier superkey) | `{period: "7d"}` |
 | `search_docs` *keyless* | Search the Relay docs | `{query: "idempotency key"}` |
 
+## Local files
+
+The hosted server cannot read files on your computer. How a local file reaches a model, per client:
+
+| Client | Local file → model |
+|---|---|
+| Claude Code, Cursor, VS Code, Codex (hosted server) | `upload_file({slot: true})` returns a `curl` line; the agent runs it in your shell with the file's path (no key in the shell, single use, 10 minutes) and it prints the file's `url`; pass that `url` to `run_model` (for example as `image`). |
+| claude.ai, Claude Desktop, ChatGPT | No shell to run the upload: give the model a public URL of the file, or install the local server (Claude Desktop: the bundle). |
+| Local server (stdio), any client | `upload_file({path: "./photo.png"})` uploads the file and returns its `url`. |
+
+Image editors: `search_models({tag: "image-to-image"})` lists every image model that takes an input image, each with `accepts: ["image"]`.
+
 ## Notes
 
 - **Auth.** On the local server, and on a hosted server without OAuth, `tools/list` and the keyless tools answer without a credential. A hosted server with OAuth on answers every `/mcp` request without a credential with `401` and `WWW-Authenticate: Bearer resource_metadata="…", scope="relay"`, which is how clients start the "Connect Relay" sign-in; `X-API-Key` and `Authorization: Bearer <relay key or dashboard JWT>` keep working there. A billed tool called without one returns a `MISSING_CREDENTIALS` tool error that names what to set: the `X-API-Key` header (hosted) or `RELAY_API_KEY` (stdio). Errors from Relay come back as tool errors that include the error class, `code`, `requestId` and the server's detail. Your key never appears in a tool result or a log line.
 - **Long tasks.** `run_model` waits up to 45 s (`wait_seconds`, 0–45). If the task is still running after that, it returns the `task_id` and the line "Do not resubmit: call check_task with this task_id". Every submit carries an `Idempotency-Key`, so a retry does not bill twice. Pass your own `idempotency_key` if your agent might send the same submit again.
 - **Expiry.** Each result link comes with its expiry: "expires 1 h after completion unless store_output was set". To keep results longer, pass `store_output` with a `media_storage` SKU from `get_pricing` (for example `relay7d`). That SKU adds a per-file fee.
-- **Re-hosting.** Some routes return images only as inline base64 (for example gpt-image and Flux). The server uploads those images through `/v2/files`, at the `store_output` retention or `relay1h` by default (free within the daily quota), and returns a URL and a `file_id` instead of the base64. Image content blocks are opt-in: pass `inline_images: true`, which applies to images of 1 MB or less.
-- **Uploads.** On stdio, `upload_file` streams a local `path` of up to 100 MB. The hosted server cannot read your disk. On hosted, pass `base64` (up to 4 MB) or a public `url` instead. Retention defaults to `relay1h`.
+- **Image links.** The image routes that answer base64 (Gemini, gpt-image, FLUX-2-pro) also answer Relay's own links (`urls`); the server returns those links in place of the base64, for 1 h or the `store_output` lifetime. A result that carries base64 without a Relay link is uploaded through `/v2/files` (at the `store_output` retention, else `relay1h`, free within the daily quota) and comes back as a URL and a `file_id`. Image content blocks are opt-in: pass `inline_images: true`, which applies to images of 1 MB or less.
+- **Uploads.** On stdio, `upload_file` streams a local `path` of up to 100 MB. The hosted server cannot read your disk: use `slot: true` (see [Local files](#local-files)), `base64` (up to 4 MB) or a public `url`. Retention defaults to `relay1h`.
 
 ## Self-hosting
 

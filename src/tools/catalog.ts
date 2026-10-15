@@ -1,10 +1,30 @@
 // Catalog tools (keyless): search_models, get_model, get_pricing, estimate_cost. Read through ctx.catalog only.
 import { z } from "zod";
-import type { UsageInput } from "@relaygpu/client";
-import { defineTool, jsonResult, type ToolDef } from "../context.js";
+import type { ModelRow, UsageInput } from "@relaygpu/client";
+import { defineTool, jsonResult, type ToolContext, type ToolDef } from "../context.js";
 
 const SEARCH_CAP = 50;
 const READ_ONLY = { readOnlyHint: true, idempotentHint: true, openWorldHint: true } as const;
+
+/** The tag whose search also matches image-output models that take an input image (F2: editors by schema). */
+const EDIT_TAG = "image-to-image";
+/** Request properties that carry an input image: `image`, `images`, FLUX's `input_image` / `input_image_2…`. */
+const IMAGE_INPUT = /^(images?|input_image(_\d+)?)$/;
+
+/**
+ * Image-output models (`*-to-image` tags) whose request schema takes an input image, read from the cached
+ * `models.get` details; a detail that fails to load is skipped, never fatal to the search.
+ */
+async function imageEditors(ctx: ToolContext, rows: ModelRow[]): Promise<Set<string>> {
+  const candidates = rows.filter((r) => r.tag.endsWith("-to-image"));
+  const details = await Promise.allSettled(candidates.map((r) => ctx.catalog.models.get(r.name)));
+  const names = new Set<string>();
+  details.forEach((d, i) => {
+    const props = d.status === "fulfilled" ? (d.value.request_schema as { properties?: object } | null)?.properties : undefined;
+    if (props && Object.keys(props).some((k) => IMAGE_INPUT.test(k))) names.add(candidates[i].name);
+  });
+  return names;
+}
 
 /** The part of a pricing row's `model` after its `source.` prefix (`image.Qwen/qwen-image` → `Qwen/qwen-image`). */
 const rowModel = (m: string) => m.slice(m.indexOf(".") + 1);
@@ -14,8 +34,9 @@ const search_models = defineTool({
   title: "Search Relay models",
   description:
     "Lists Relay models by tag and/or text. Common tags: text-to-image, image-to-image, text-to-video, image-to-video, " +
-    "video-to-video, text-to-speech, speech-to-text, text-to-text, text-to-embedding. Returns name, tag and route per " +
-    "model (at most 50). Then call get_model with a name for its input schema.",
+    "video-to-video, text-to-speech, speech-to-text, text-to-text, text-to-embedding. image-to-image also lists every " +
+    "image model that takes an input image (accepts: [\"image\"]). Returns name, tag and route per model (at most 50). " +
+    "Then call get_model with a name for its input schema.",
   inputSchema: {
     tag: z.string().optional().describe("Model type tag, e.g. text-to-image or image-to-video. Omit for every tag."),
     query: z
@@ -25,7 +46,14 @@ const search_models = defineTool({
   },
   annotations: READ_ONLY,
   async handler({ tag, query }, ctx) {
-    const rows = await ctx.catalog.models.list({ tag: tag || undefined, signal: ctx.signal });
+    let rows: (ModelRow & { accepts?: string[] })[];
+    if (tag === EDIT_TAG) {
+      const all = await ctx.catalog.models.list({ signal: ctx.signal });
+      const editors = await imageEditors(ctx, all);
+      rows = all.filter((r) => r.tag === EDIT_TAG || editors.has(r.name)).map((r) => (editors.has(r.name) ? { ...r, accepts: ["image"] } : r));
+    } else {
+      rows = await ctx.catalog.models.list({ tag: tag || undefined, signal: ctx.signal });
+    }
     const words = (query ?? "").toLowerCase().split(/\s+/).filter(Boolean);
     const matches = rows.filter((r) => {
       const hay = `${r.name} ${r.display_name ?? ""} ${r.tag}`.toLowerCase();
@@ -38,6 +66,7 @@ const search_models = defineTool({
       endpoint: r.endpoint?.path ?? null,
       async_default: r.endpoint?.async_default ?? null,
       store_output_supported: r.store_output_supported,
+      accepts: r.accepts,
     }));
     const notes: string[] = [];
     if (matches.length > SEARCH_CAP) {
@@ -120,7 +149,13 @@ const usageSchema = z
     cache_write_1h_input_tokens: z.number().optional().describe("per_token: 1-hour prompt-cache writes (a subset of input_tokens)."),
     image_count: z.number().optional().describe("per_image: images generated (default 1)."),
     resolution_tier: z.string().optional().describe("per_image / per_second_video: resolution key of the row, e.g. 1K, 2K, 720p."),
-    duration_seconds: z.number().optional().describe("per_second_video / per_second_audio: seconds of output (or input audio)."),
+    duration_seconds: z
+      .number()
+      .optional()
+      .describe(
+        "per_second_video / per_second_audio: seconds of output; for an edit of an input video (Kling Omni/o1 base_video_url, " +
+          "Motion Control) pass the input video's length, which is what is rendered and billed. Speech-to-text: seconds of input audio.",
+      ),
     quality_mode: z.string().optional().describe("per_second_video: std or pro (Kling)."),
     sound: z.boolean().optional().describe("per_second_video: sound on or off."),
     has_ref: z.boolean().optional().describe("per_second_video: a reference input is present (Kling O1)."),

@@ -21,16 +21,19 @@ const get_usage = defineTool({
   name: "get_usage",
   title: "Get usage",
   description:
-    `Read the account's usage and spend per API key. Pass period (e.g. 7d) for a by-date breakdown, or from + to. ${AUTH_NOTE}`,
+    `Read the account's usage and spend per API key, newest keys first, 10 keys per page (pass starting_after = the previous answer's next_cursor for the next page; limit up to 1000). Pass period (e.g. 7d, max 30d) for a by-date breakdown, or from + to. ${AUTH_NOTE}`,
   inputSchema: {
     period: z.string().optional().describe("Time period shorthand, e.g. `7d` or `30d` (max 30 days); adds a by-date breakdown."),
     from: z.string().optional().describe("Start date `YYYY-MM-DD`; use together with `to`."),
     to: z.string().optional().describe("End date `YYYY-MM-DD`; use together with `from`."),
+    limit: z.number().int().min(1).max(1000).optional().describe("Keys per page (default 10, max 1000)."),
+    starting_after: z.string().optional().describe("Cursor: the `next_cursor` of the previous page."),
   },
   annotations: { readOnlyHint: true, openWorldHint: true },
   billed: true,
-  async handler({ period, from, to }, ctx) {
-    return jsonResult(await ctx.client().account.usage({ period, from, to }));
+  async handler({ period, from, to, limit, starting_after }, ctx) {
+    // An unbounded call lists every key on the account (10k on a test account = 4 MB); page by default.
+    return jsonResult(await ctx.client().account.usage({ period, from, to, limit: limit ?? 10, starting_after }));
   },
 });
 

@@ -28,8 +28,20 @@ describe("account tools", () => {
     expect(r.isError).toBeFalsy();
     expect(m.calls[0].path).toBe("/v2/customer/usage");
     expect(m.calls[0].query.get("period")).toBe("7d");
+    expect(m.calls[0].query.get("limit")).toBe("10");
+    expect(m.calls[0].query.has("starting_after")).toBe(false);
     expect(m.calls[0].query.has("from")).toBe(false);
     expect(m.calls[0].headers.get("authorization")).toBe("Bearer a.b.c");
+    await s.close();
+  });
+
+  it("get_usage: a page cursor and an explicit limit pass through", async () => {
+    const m = mockFetch([{ method: "GET", path: "/v2/customer/usage", reply: { json: { keys: [], total: 0, has_more: false, next_cursor: null } } }]);
+    const s = await connect({ fetch: m.fetch, tools: accountTools, credential: { jwt: "a.b.c" } });
+    const r = await s.call("get_usage", { limit: 25, starting_after: "key_abc" });
+    expect(r.isError).toBeFalsy();
+    expect(m.calls[0].query.get("limit")).toBe("25");
+    expect(m.calls[0].query.get("starting_after")).toBe("key_abc");
     await s.close();
   });
 

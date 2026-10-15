@@ -1,6 +1,7 @@
 # Changelog
 
 ## 0.1.7 — 2026-10-15
+- `get_usage` pages: 10 keys per answer by default (`limit` up to 1000, `starting_after` = the previous answer's `next_cursor`). An unbounded call listed every key on the account.
 - `run_model` submits `async: true` to every model whose request schema has an `async` property (image, video, audio), long-polls up to `wait_seconds` and past it answers the `task_id` with `next: check_task`. A slow image run no longer ends in an edge 524 with the result lost and the charge real. A caller's `async` in `input` is replaced, with a note. Chat models (no `async` in their schema) are sent unchanged and answer inline. A completed replay carries `replayed: true`.
 - `run_model` text: the description and `idempotency_key` hold for every route; the same key with a changed input is refused `422 IDEMPOTENCY_KEY_REUSED`. `store_output` and `model` are tool arguments only: a copy inside `input` is dropped and the answer notes it. `mode` is one sentence on `run_model` and `estimate_cost`.
 - Errors print `retry_after_seconds` only on 429 and 503, never on a 524 or 504.

@@ -8,6 +8,8 @@ export default defineConfig({
   dts: { entry: "src/server.ts" },
   clean: true,
   splitting: true,
+  // agent-setup.md is inlined as a string, so the hosted route reads no file at runtime.
+  loader: { ".md": "text" },
   // dist/stdio.js is the package bin: give it a shebang and the exec bit.
   async onSuccess() {
     const bin = "dist/stdio.js";

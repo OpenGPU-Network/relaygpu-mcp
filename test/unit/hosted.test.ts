@@ -2,7 +2,8 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
 import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
-import { credentialFromHeaders, startHostedServer } from "../../src/hosted.js";
+import { readFileSync } from "node:fs";
+import { AGENT_SETUP_PATH, credentialFromHeaders, startHostedServer } from "../../src/hosted.js";
 import { ALL_TOOLS } from "../../src/tools/index.js";
 import { mockFetch, TEST_BASE, textOf } from "../helpers/harness.js";
 
@@ -108,5 +109,18 @@ describe("hosted server", () => {
 
   it("D9 request timeout is ≥ 90 s", () => {
     expect(hosted.server.requestTimeout).toBeGreaterThanOrEqual(90_000);
+  });
+
+  it("0.1.7 A12 GET /agent-setup.md: the page as markdown, cached 5 min, keyless, the same body for any Accept", async () => {
+    const page = readFileSync(new URL("../../agent-setup.md", import.meta.url), "utf8");
+    for (const accept of [undefined, "application/json"]) {
+      const r = await fetch(hosted.url + AGENT_SETUP_PATH, accept ? { headers: { Accept: accept } } : {});
+      expect(r.status).toBe(200);
+      expect(r.headers.get("content-type")).toBe("text/markdown; charset=utf-8");
+      expect(r.headers.get("cache-control")).toBe("public, max-age=300");
+      const text = await r.text();
+      expect(text).toBe(page);
+      expect(text).toContain("## Claude Code");
+    }
   });
 });

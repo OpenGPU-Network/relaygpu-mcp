@@ -7,6 +7,7 @@ COPY package.json package-lock.json ./
 RUN npm ci
 COPY tsconfig.json tsup.config.ts ./
 COPY src ./src
+COPY agent-setup.md ./
 RUN npm run build && npm prune --omit=dev
 
 FROM node:22-alpine

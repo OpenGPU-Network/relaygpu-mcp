@@ -7,6 +7,7 @@
 - `upload_file({slot: true})` answers `open_url` (the same URL as `put_url`); `next` names both roads: run the curl, or open `open_url` in a browser and pick the file. The hosted server's `upload_file` schema no longer lists `path` (a `path` sent anyway still gets the refusal); the stdio schema keeps it.
 - `estimate_cost` refuses a `resolution_tier` the model's `per_image_resolution` / `per_second_video` row does not price, naming the row's keys, instead of falling back to the cheapest cell.
 - `search_models`: every row carries `accepts` (`["image"]` for image models whose schema takes an input image, `[]` otherwise). No tool text names a retired model: the examples use `google/gemini-nano-banana-2.1`.
+- Hosted: `GET /agent-setup.md` answers the agent-setup page (`agent-setup.md` at the repo root, built into `dist`) as `text/markdown; charset=utf-8` with `Cache-Control: public, max-age=300`, keyless and outside the OAuth-guarded `/mcp`, the same markdown for any `Accept`. The stdio server does not serve it.
 - README: the claude.ai / Claude Desktop / ChatGPT row of "Local files" is the browser upload page; long image runs return a `task_id`, never a 524.
 
 ## 0.1.6 — 2026-10-15

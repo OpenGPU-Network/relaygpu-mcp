@@ -156,6 +156,13 @@ describe("A14 F19 F20 protected-resource metadata and the challenge", () => {
     expect(m.calls).toHaveLength(0);
   });
 
+  it("0.1.7 A12 /agent-setup.md answers without a credential while OAuth guards /mcp", async () => {
+    const r = await fetch(hosted.url + "/agent-setup.md");
+    expect(r.status).toBe(200);
+    expect(r.headers.get("www-authenticate")).toBeNull();
+    expect(await r.text()).toContain("## Claude Code");
+  });
+
   it("healthz, the server card and metrics stay public; the card says a credential is required (OAuth or header)", async () => {
     expect((await fetch(hosted.url + "/healthz")).status).toBe(200);
     expect((await fetch(hosted.url + "/metrics")).status).toBe(200);

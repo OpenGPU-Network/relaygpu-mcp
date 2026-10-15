@@ -13,6 +13,7 @@ import { log } from "./log.js";
 import { createOAuth, PRM_PATH, SCOPE, type OAuth, type OAuthConfig } from "./oauth.js";
 import { MAX_BASE64_BYTES } from "./tools/files.js";
 import { VERSION } from "./version.js";
+import AGENT_SETUP from "../agent-setup.md";
 
 export interface HostedOptions {
   port: number;
@@ -103,6 +104,10 @@ function serverCard(tools: Tool[], oauth: OAuth | null) {
 function send(res: ServerResponse, status: number, body: string, type: string, headers: Record<string, string> = {}) {
   res.writeHead(status, { "Content-Type": type, ...CORS_HEADERS, ...headers }).end(body);
 }
+
+/** The agent-setup page (F10): keyless, outside the OAuth-guarded /mcp, one body for every Accept. */
+export const AGENT_SETUP_PATH = "/agent-setup.md";
+const AGENT_SETUP_CACHE = { "Cache-Control": "public, max-age=300" };
 
 const sendJson = (res: ServerResponse, status: number, body: string, headers?: Record<string, string>) =>
   send(res, status, body, "application/json", headers);
@@ -200,6 +205,7 @@ export async function startHostedServer(opts: HostedOptions): Promise<{ server: 
       if (path === "/healthz") return sendJson(res, 200, JSON.stringify({ status: "ok", version: VERSION }));
       if (path === "/metrics") return send(res, 200, renderMetrics(), "text/plain; version=0.0.4");
       if (path === "/.well-known/mcp/server-card.json") return sendJson(res, 200, card);
+      if (path === AGENT_SETUP_PATH) return send(res, 200, AGENT_SETUP, "text/markdown; charset=utf-8", AGENT_SETUP_CACHE);
       if (oauth && (path === PRM_PATH || path === PRM_PATH + "/mcp")) return sendJson(res, 200, oauth.prm);
       sendJson(res, 404, '{"error":"not found"}');
     } catch (e) {

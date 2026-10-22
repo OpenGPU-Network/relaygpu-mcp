@@ -1,7 +1,7 @@
 # Hosted Relay MCP (Streamable HTTP, stateless). PORT and RELAY_BASE_URL come from the environment per app.
 # OAuth ("Connect Relay") is on when the app sets OAUTH_ISSUER and MCP_RESOURCE_URL; OAUTH_MCP_CLIENT_SECRET is the
 # same value as Relay's OAUTH_MCP_CLIENT_SECRET in that environment (README → Self-hosting → OAuth). Never baked in.
-FROM node:22-alpine AS build
+FROM node:22.23.4-alpine AS build
 WORKDIR /app
 COPY package.json package-lock.json ./
 RUN npm ci
@@ -10,7 +10,7 @@ COPY src ./src
 COPY agent-setup.md ./
 RUN npm run build && npm prune --omit=dev
 
-FROM node:22-alpine
+FROM node:22.23.4-alpine
 ENV NODE_ENV=production PORT=2300 LOG_LEVEL=warning
 WORKDIR /app
 COPY --from=build --chown=node:node /app/package.json ./

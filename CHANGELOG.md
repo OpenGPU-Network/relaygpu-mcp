@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.1.8 — 2026-10-24
+- `search_models`, `get_model`, `get_pricing`, `estimate_cost` and `run_model`'s model lookup run as the caller's account when the connection carries a credential: models the account is granted beyond the public list appear in searches and pricing, answer `get_model`, and run. Without a credential they answer the public catalog as before. Task and workflow-run polls, `list_workflows` and docs stay keyless.
+- The hosted server builds the caller's client per request, so a keyed lookup is one read per call and no cache is shared between credentials; the stdio server's one client caches as before.
+- Requires `@relaygpu/client` 0.1.2 (it sends the client's credential on the catalog reads).
+
 ## 0.1.7 — 2026-10-15
 - `get_usage` pages: 10 keys per answer by default (`limit` up to 1000, `starting_after` = the previous answer's `next_cursor`). An unbounded call listed every key on the account.
 - `run_model` submits `async: true` to every model whose request schema has an `async` property (image, video, audio), long-polls up to `wait_seconds` and past it answers the `task_id` with `next: check_task`. A slow image run no longer ends in an edge 524 with the result lost and the charge real. A caller's `async` in `input` is replaced, with a note. Chat models (no `async` in their schema) are sent unchanged and answer inline. A completed replay carries `replayed: true`.

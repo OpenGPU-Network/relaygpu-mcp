@@ -71,7 +71,7 @@ const HEADER_SCHEMES = [
 ];
 
 function authentication(oauth: OAuth | null) {
-  if (!oauth) return { required: false, note: "Keyless tools answer without a credential; billed tools need one.", schemes: HEADER_SCHEMES };
+  if (!oauth) return { required: false, note: "Keyless tools answer without a credential (the public catalog; with one, the catalog tools answer your account's); billed tools need one.", schemes: HEADER_SCHEMES };
   return {
     required: true,
     note: "Every request needs a credential: sign in with OAuth (Connect Relay), or send a Relay key header.",

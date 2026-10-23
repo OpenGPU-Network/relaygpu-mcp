@@ -71,7 +71,7 @@ const run_model = defineTool({
   async handler({ model, input, store_output, wait_seconds, idempotency_key, inline_images }, ctx) {
     const deadline = Date.now() + wait_seconds * 1000;
     // Unknown → ModelNotFoundError here; retired → the SDK's ModelRetiredError from client.run. Both before any POST.
-    const detail = await ctx.catalog.models.get(model);
+    const detail = await ctx.reader.models.get(model);
     const forward = Boolean(store_output) && detail.store_output_supported === true;
     const sku = store_output && store_output !== "provider" ? store_output : undefined;
     const store: Store = !sku ? "none" : forward ? "applied" : "unsupported";

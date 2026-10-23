@@ -117,14 +117,14 @@ Ready-to-copy files are in [`examples/`](examples/).
 
 ## Tools
 
-Tools marked *keyless* work without a credential on the local server. The others are billed or account tools and need one. A hosted server with OAuth on (see [Self-hosting](#self-hosting)) takes no request without a credential, keyless tools included.
+Tools marked *keyless* work without a credential on the local server. Keyless tools answer the public catalog; with a credential, `search_models`, `get_model`, `get_pricing`, `estimate_cost` and `run_model`'s model lookup answer your account's: the models your tier and grants can run appear and run. The others are billed or account tools and need one. A hosted server with OAuth on (see [Self-hosting](#self-hosting)) takes no request without a credential, keyless tools included.
 
 | Tool | What it does | Example |
 |---|---|---|
 | `search_models` *keyless* | Find models by tag and/or text; `image-to-image` also lists every image model that takes an input image (`accepts: ["image"]`) | "Find a text-to-video model from Kling" → `{tag: "text-to-video", query: "kling"}` |
 | `get_model` *keyless* | Route, request schema, example, pricing and status of one model | `{model: "Qwen/qwen-image"}` |
-| `get_pricing` *keyless* | Public prices for one model or all of them, including the `media_storage` SKUs | `{model: "KlingTeam/v3-T2V"}` |
-| `estimate_cost` *keyless* | Estimate from the public price list (not an invoice) | `{model: "KlingTeam/v3-T2V", usage: {duration_seconds: 5, quality_mode: "std"}}` |
+| `get_pricing` *keyless* | Prices (public; your account's with a credential) for one model or all of them, including the `media_storage` SKUs | `{model: "KlingTeam/v3-T2V"}` |
+| `estimate_cost` *keyless* | Estimate from the price list (public; your account's with a credential; not an invoice) | `{model: "KlingTeam/v3-T2V", usage: {duration_seconds: 5, quality_mode: "std"}}` |
 | `run_model` | Run any model by name and wait up to 45 s | `{model: "Qwen/qwen-image", input: {prompt: "a red fox", size: "512x512"}}` |
 | `check_task` *keyless* | Poll a task (waits up to 30 s) | `{task_id: "direct:…", wait_seconds: 30}` |
 | `upload_file` | Host a file and get a URL for any `*_url` input (or an image editor's `image`), or a one-time upload slot for a local file on the hosted server | `{path: "./clip.mp4", retention: "relay1d"}` · `{slot: true}` |

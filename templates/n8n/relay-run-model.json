@@ -1,0 +1,350 @@
+{
+  "name": "Relay: run a model",
+  "nodes": [
+    {
+      "parameters": {
+        "content": "**Start**\nClick Execute workflow. Before the first run, pick your Relay API key credential on the three Relay nodes (Header Auth, header name X-API-Key).",
+        "height": 150,
+        "width": 300
+      },
+      "id": "f0cb6047-6f6f-58e3-831f-3754672c2d39",
+      "name": "Note: Start",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -380,
+        60
+      ]
+    },
+    {
+      "parameters": {},
+      "id": "c88e9a59-5673-57a9-8a89-df5b68c082bb",
+      "name": "Start",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        -300,
+        240
+      ]
+    },
+    {
+      "parameters": {
+        "content": "**Set model and input**\nChoose the Relay model and its input. The input follows the model's request schema (ask the get_model tool, or see the Relay docs).",
+        "height": 150,
+        "width": 300
+      },
+      "id": "510bf552-56dd-53e8-b547-37024df70c4e",
+      "name": "Note: Set",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -60,
+        60
+      ]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "cf398843-4d1f-5ae2-b951-3c54fde14372",
+              "name": "model",
+              "value": "black-forest-labs/FLUX-2-pro",
+              "type": "string"
+            },
+            {
+              "id": "d13105d7-4b12-533a-873c-211763500856",
+              "name": "input",
+              "value": "{\"prompt\":\"A red fox in an autumn forest\",\"width\":512,\"height\":512}",
+              "type": "object"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "ebbe3854-03f4-582d-880a-fd39cddc4fcc",
+      "name": "Set model and input",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        -60,
+        240
+      ]
+    },
+    {
+      "parameters": {
+        "content": "**Relay: run_model**\nSubmits the job and returns a task id right away (wait_seconds is 0), so n8n never holds the connection open. Use it for image, video and audio models.",
+        "height": 150,
+        "width": 300
+      },
+      "id": "ab20ef24-7d49-56be-9232-560cc3f3cc17",
+      "name": "Note: run",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        240,
+        60
+      ]
+    },
+    {
+      "parameters": {
+        "serverTransport": "httpStreamable",
+        "endpointUrl": "https://mcp.relaygpu.com/mcp",
+        "authentication": "headerAuth",
+        "tool": {
+          "__rl": true,
+          "value": "run_model",
+          "mode": "id"
+        },
+        "inputMode": "json",
+        "jsonInput": "={{ JSON.stringify({ model: $json.model, input: $json.input, wait_seconds: 0 }) }}",
+        "options": {
+          "convertToBinary": false,
+          "timeout": 120000
+        }
+      },
+      "id": "b6cd3b6a-d5d9-5ac8-82b4-90691ae07ad5",
+      "name": "Relay: run_model",
+      "type": "@n8n/n8n-nodes-langchain.mcpClient",
+      "typeVersion": 1,
+      "position": [
+        240,
+        240
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "name": "Relay API key"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "content": "**Wait, then Relay: check_task**\nAsks Relay about the task (it waits up to 25 seconds per call). **Done?** sends the loop back through Wait until the status is completed or failed.",
+        "height": 150,
+        "width": 320
+      },
+      "id": "9e682072-aec4-5c15-9600-ff45633a974d",
+      "name": "Note: loop",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        540,
+        60
+      ]
+    },
+    {
+      "parameters": {
+        "amount": 3
+      },
+      "id": "ad069c2e-6370-5cd0-a423-3dba9476d2de",
+      "name": "Wait",
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1.1,
+      "position": [
+        540,
+        240
+      ],
+      "webhookId": "7dcc9399-cef7-540d-8cec-db097a84de2e"
+    },
+    {
+      "parameters": {
+        "serverTransport": "httpStreamable",
+        "endpointUrl": "https://mcp.relaygpu.com/mcp",
+        "authentication": "headerAuth",
+        "tool": {
+          "__rl": true,
+          "value": "check_task",
+          "mode": "id"
+        },
+        "inputMode": "json",
+        "jsonInput": "={{ JSON.stringify({ task_id: $('Relay: run_model').first().json.content.at(-1).text.task_id, wait_seconds: 25 }) }}",
+        "options": {
+          "convertToBinary": false,
+          "timeout": 120000
+        }
+      },
+      "id": "c0f2d6f9-c220-556f-945f-c9dfde8fced9",
+      "name": "Relay: check_task",
+      "type": "@n8n/n8n-nodes-langchain.mcpClient",
+      "typeVersion": 1,
+      "position": [
+        780,
+        240
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "name": "Relay API key"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "8b4cdd90-64a0-5b8f-941a-22b16ff846b0",
+              "leftValue": "={{ [\"completed\",\"failed\"].includes($json.content?.at(-1)?.text?.status) || !$json.content?.at(-1)?.text?.status }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "4f3b0baf-f59f-54cb-a90b-d0156c3f65ba",
+      "name": "Done?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        1020,
+        240
+      ]
+    },
+    {
+      "parameters": {
+        "content": "**Result**\nstatus, task_id, urls (the result links, valid for one hour) and error. Download or pass on the links; do not copy base64 around.",
+        "height": 150,
+        "width": 300
+      },
+      "id": "458c6ff8-cd1d-574f-af98-a5c7e175ce36",
+      "name": "Note: Result",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        1280,
+        60
+      ]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "0a44fc6c-1814-5e39-80be-a0736f4cc322",
+              "name": "status",
+              "value": "={{ $json.content?.at(-1)?.text?.status ?? 'error' }}",
+              "type": "string"
+            },
+            {
+              "id": "4bd6d6fc-7ecb-5951-b31f-6367d95c2968",
+              "name": "task_id",
+              "value": "={{ $json.content?.at(-1)?.text?.task_id }}",
+              "type": "string"
+            },
+            {
+              "id": "f9e8f2bc-f6b3-526e-a9e3-72fed71804d6",
+              "name": "urls",
+              "value": "={{ [...new Set(JSON.stringify($json.content?.at(-1)?.text?.output ?? {}).match(/https:\\/\\/[^\"\\\\]+/g) ?? [])] }}",
+              "type": "array"
+            },
+            {
+              "id": "a751f274-d557-56d0-a251-dbb92b59c905",
+              "name": "error",
+              "value": "={{ $json.content?.at(-1)?.text?.status === 'completed' ? '' : (typeof $('Relay: run_model').first().json.content?.at(-1)?.text === 'string' ? $('Relay: run_model').first().json.content?.at(-1)?.text : ($json.content?.at(-1)?.text?.error ?? ($json.content?.at(-1)?.text?.status ? JSON.stringify($json.content?.at(-1)?.text) : $json.content?.at(-1)?.text ?? 'check_task returned no status'))) }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "98463761-22ca-5c47-b7ed-cd934607fb6b",
+      "name": "Result",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        1280,
+        240
+      ]
+    }
+  ],
+  "connections": {
+    "Start": {
+      "main": [
+        [
+          {
+            "node": "Set model and input",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Set model and input": {
+      "main": [
+        [
+          {
+            "node": "Relay: run_model",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Relay: run_model": {
+      "main": [
+        [
+          {
+            "node": "Wait",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Wait": {
+      "main": [
+        [
+          {
+            "node": "Relay: check_task",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Relay: check_task": {
+      "main": [
+        [
+          {
+            "node": "Done?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Done?": {
+      "main": [
+        [
+          {
+            "node": "Result",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Wait",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  }
+}

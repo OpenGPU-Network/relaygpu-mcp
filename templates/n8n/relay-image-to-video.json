@@ -1,0 +1,407 @@
+{
+  "name": "Relay: image to video",
+  "nodes": [
+    {
+      "parameters": {
+        "content": "**Start**\nClick Execute workflow. Before the first run, pick your Relay API key credential on the three Relay nodes (Header Auth, header name X-API-Key).",
+        "height": 150,
+        "width": 300
+      },
+      "id": "f0cb6047-6f6f-58e3-831f-3754672c2d39",
+      "name": "Note: Start",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -380,
+        60
+      ]
+    },
+    {
+      "parameters": {},
+      "id": "c88e9a59-5673-57a9-8a89-df5b68c082bb",
+      "name": "Start",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        -300,
+        240
+      ]
+    },
+    {
+      "parameters": {
+        "content": "**Set prompt**\nprompt describes the picture, motion describes how it should move.",
+        "height": 120,
+        "width": 280
+      },
+      "id": "510bf552-56dd-53e8-b547-37024df70c4e",
+      "name": "Note: Set",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -60,
+        60
+      ]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "4b080125-64c7-506c-93ad-d3d8b5484aca",
+              "name": "prompt",
+              "value": "A lighthouse on a cliff at dusk, waves below, cinematic",
+              "type": "string"
+            },
+            {
+              "id": "a0663ddf-b593-5299-9cb3-4357be32be57",
+              "name": "motion",
+              "value": "The waves roll in and the light of the lighthouse sweeps slowly across the water",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "d94c1811-d82a-5d6d-9b57-23707a8d8c55",
+      "name": "Set prompt",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        -60,
+        240
+      ]
+    },
+    {
+      "parameters": {
+        "content": "**Relay: generate image**\nMakes the picture with FLUX.2 Pro ($0.036). Relay returns a hosted link to it, and only the link travels to the next step.",
+        "height": 140,
+        "width": 300
+      },
+      "id": "6ab2d8dc-941d-56ce-81e7-7c26287cbd53",
+      "name": "Note: image",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        220,
+        60
+      ]
+    },
+    {
+      "parameters": {
+        "serverTransport": "httpStreamable",
+        "endpointUrl": "https://mcp.relaygpu.com/mcp",
+        "authentication": "headerAuth",
+        "tool": {
+          "__rl": true,
+          "value": "run_model",
+          "mode": "id"
+        },
+        "inputMode": "json",
+        "jsonInput": "={{ JSON.stringify({ model: 'black-forest-labs/FLUX-2-pro', input: { prompt: $json.prompt, width: 1280, height: 720 }, wait_seconds: 45 }) }}",
+        "options": {
+          "convertToBinary": false,
+          "timeout": 120000
+        }
+      },
+      "id": "88ea1768-4145-55c5-be24-274df5633a33",
+      "name": "Relay: generate image",
+      "type": "@n8n/n8n-nodes-langchain.mcpClient",
+      "typeVersion": 1,
+      "position": [
+        220,
+        240
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "name": "Relay API key"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "content": "**Relay: animate image**\nSends that link to Wan 2.5 image-to-video (5 seconds, 480p, about $0.25) and gets a task id back right away.",
+        "height": 140,
+        "width": 300
+      },
+      "id": "8ac20402-720b-5f84-b2ae-20849b441c99",
+      "name": "Note: animate",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        480,
+        60
+      ]
+    },
+    {
+      "parameters": {
+        "serverTransport": "httpStreamable",
+        "endpointUrl": "https://mcp.relaygpu.com/mcp",
+        "authentication": "headerAuth",
+        "tool": {
+          "__rl": true,
+          "value": "run_model",
+          "mode": "id"
+        },
+        "inputMode": "json",
+        "jsonInput": "={{ JSON.stringify({ model: 'Wan-AI/Wan2.5-I2V', input: { prompt: $('Set prompt').first().json.motion, first_frame_url: $json.content.at(-1).text.output.urls[0], resolution: '480p', duration: 5 }, wait_seconds: 0 }) }}",
+        "options": {
+          "convertToBinary": false,
+          "timeout": 120000
+        }
+      },
+      "id": "b866a35d-6ac6-55ee-9004-e657fb2ed9c2",
+      "name": "Relay: animate image",
+      "type": "@n8n/n8n-nodes-langchain.mcpClient",
+      "typeVersion": 1,
+      "position": [
+        480,
+        240
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "name": "Relay API key"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "content": "**Wait, then Relay: check_task**\nVideo takes a minute or more. **Done?** loops back through Wait until the status is completed or failed.",
+        "height": 140,
+        "width": 320
+      },
+      "id": "9e682072-aec4-5c15-9600-ff45633a974d",
+      "name": "Note: loop",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        780,
+        60
+      ]
+    },
+    {
+      "parameters": {
+        "amount": 3
+      },
+      "id": "ad069c2e-6370-5cd0-a423-3dba9476d2de",
+      "name": "Wait",
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1.1,
+      "position": [
+        780,
+        240
+      ],
+      "webhookId": "7dcc9399-cef7-540d-8cec-db097a84de2e"
+    },
+    {
+      "parameters": {
+        "serverTransport": "httpStreamable",
+        "endpointUrl": "https://mcp.relaygpu.com/mcp",
+        "authentication": "headerAuth",
+        "tool": {
+          "__rl": true,
+          "value": "check_task",
+          "mode": "id"
+        },
+        "inputMode": "json",
+        "jsonInput": "={{ JSON.stringify({ task_id: $('Relay: animate image').first().json.content.at(-1).text.task_id, wait_seconds: 25 }) }}",
+        "options": {
+          "convertToBinary": false,
+          "timeout": 120000
+        }
+      },
+      "id": "c0f2d6f9-c220-556f-945f-c9dfde8fced9",
+      "name": "Relay: check_task",
+      "type": "@n8n/n8n-nodes-langchain.mcpClient",
+      "typeVersion": 1,
+      "position": [
+        1020,
+        240
+      ],
+      "credentials": {
+        "httpHeaderAuth": {
+          "name": "Relay API key"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "8b4cdd90-64a0-5b8f-941a-22b16ff846b0",
+              "leftValue": "={{ [\"completed\",\"failed\"].includes($json.content?.at(-1)?.text?.status) || !$json.content?.at(-1)?.text?.status }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "4f3b0baf-f59f-54cb-a90b-d0156c3f65ba",
+      "name": "Done?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        1260,
+        240
+      ]
+    },
+    {
+      "parameters": {
+        "content": "**Result**\nstatus, task_id, urls (the video link, valid for one hour) and error.",
+        "height": 120,
+        "width": 280
+      },
+      "id": "458c6ff8-cd1d-574f-af98-a5c7e175ce36",
+      "name": "Note: Result",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        1520,
+        60
+      ]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "0a44fc6c-1814-5e39-80be-a0736f4cc322",
+              "name": "status",
+              "value": "={{ $json.content?.at(-1)?.text?.status ?? 'error' }}",
+              "type": "string"
+            },
+            {
+              "id": "4bd6d6fc-7ecb-5951-b31f-6367d95c2968",
+              "name": "task_id",
+              "value": "={{ $json.content?.at(-1)?.text?.task_id }}",
+              "type": "string"
+            },
+            {
+              "id": "f9e8f2bc-f6b3-526e-a9e3-72fed71804d6",
+              "name": "urls",
+              "value": "={{ [...new Set(JSON.stringify($json.content?.at(-1)?.text?.output ?? {}).match(/https:\\/\\/[^\"\\\\]+/g) ?? [])] }}",
+              "type": "array"
+            },
+            {
+              "id": "a751f274-d557-56d0-a251-dbb92b59c905",
+              "name": "error",
+              "value": "={{ $json.content?.at(-1)?.text?.status === 'completed' ? '' : (typeof $('Relay: animate image').first().json.content?.at(-1)?.text === 'string' ? $('Relay: animate image').first().json.content?.at(-1)?.text : ($json.content?.at(-1)?.text?.error ?? ($json.content?.at(-1)?.text?.status ? JSON.stringify($json.content?.at(-1)?.text) : $json.content?.at(-1)?.text ?? 'check_task returned no status'))) }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "98463761-22ca-5c47-b7ed-cd934607fb6b",
+      "name": "Result",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        1520,
+        240
+      ]
+    }
+  ],
+  "connections": {
+    "Start": {
+      "main": [
+        [
+          {
+            "node": "Set prompt",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Set prompt": {
+      "main": [
+        [
+          {
+            "node": "Relay: generate image",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Relay: generate image": {
+      "main": [
+        [
+          {
+            "node": "Relay: animate image",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Relay: animate image": {
+      "main": [
+        [
+          {
+            "node": "Wait",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Wait": {
+      "main": [
+        [
+          {
+            "node": "Relay: check_task",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Relay: check_task": {
+      "main": [
+        [
+          {
+            "node": "Done?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Done?": {
+      "main": [
+        [
+          {
+            "node": "Result",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Wait",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  }
+}

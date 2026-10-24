@@ -9,9 +9,11 @@ import { b64, fileResponse, pngBytes, wavBytes } from "../fixtures/relay.js";
 function ctxFor(routes: Route[], opts: { credential?: boolean; transport?: "stdio" | "http" } = {}) {
   const m = mockFetch(routes);
   const client = new Relay({ apiKey: "relay_sk_unit", baseUrl: TEST_BASE, fetch: m.fetch, retry: false });
+  const catalog = new Relay({ baseUrl: TEST_BASE, fetch: m.fetch });
   const ctx: ToolContext = {
     transport: opts.transport ?? "stdio",
-    catalog: new Relay({ baseUrl: TEST_BASE, fetch: m.fetch }),
+    catalog,
+    reader: opts.credential === false ? catalog : client,
     signal: new AbortController().signal,
     hasCredential: opts.credential !== false,
     client() {

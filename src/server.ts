@@ -22,7 +22,7 @@ export const SERVER_INSTRUCTIONS =
 
 export interface ServerOptions {
   transport: TransportKind;
-  /** The caller's credential, or null (keyless tools still work). */
+  /** The caller's credential, or null (keyless tools still work; the catalog tools then answer the public catalog). */
   credential?: Credential | null;
   /** Default `https://relaygpu.com`. */
   baseUrl?: string;
@@ -32,7 +32,8 @@ export interface ServerOptions {
   tools?: ToolDef[];
 }
 
-// One keyless client per base URL: its model cache is shared by every caller, never keyed by credential.
+// One keyless client per base URL, for polls and the public catalog. Its cache never sees a credential; a caller's own
+// client (and its cache) answers that caller's catalog lookups.
 const catalogs = new Map<string, Relay>();
 
 function catalogFor(baseUrl: string, fetchImpl?: typeof fetch): Relay {
@@ -42,14 +43,6 @@ function catalogFor(baseUrl: string, fetchImpl?: typeof fetch): Relay {
   return c;
 }
 
-/** The caller's client, reading the catalog (models, pricing) through the shared keyless one. */
-function callerClient(credential: Credential, baseUrl: string, catalog: Relay, fetchImpl?: typeof fetch): Relay {
-  const client = new Relay({ ...credential, baseUrl, fetch: fetchImpl });
-  // The SDK has no seam to inject a model cache; its catalog properties are plain fields.
-  Object.defineProperty(client, "models", { value: catalog.models });
-  Object.defineProperty(client, "pricing", { value: catalog.pricing });
-  return client;
-}
 
 // Each tool's input object per transport, built once per process (not per hosted request). An empty shape stays a raw
 // shape: the MCP SDK's own empty object lists without `additionalProperties`, as before. On the hosted server a tool's
@@ -89,6 +82,7 @@ export function createRelayMcpServer(opts: ServerOptions): McpServer {
   const credential = opts.credential && (opts.credential.apiKey || opts.credential.jwt) ? opts.credential : null;
   const secrets = credential ? [credential.apiKey, credential.jwt].filter((s): s is string => Boolean(s)) : [];
   let client: Relay | undefined;
+  const callerClient = () => (client ??= new Relay({ ...credential, baseUrl, fetch: opts.fetch }));
 
   const server = new McpServer({ name: SERVER_NAME, version: VERSION }, { instructions: SERVER_INSTRUCTIONS });
 
@@ -105,11 +99,14 @@ export function createRelayMcpServer(opts: ServerOptions): McpServer {
         const ctx: ToolContext = {
           transport: opts.transport,
           catalog,
+          get reader() {
+            return credential ? callerClient() : catalog;
+          },
           hasCredential: credential !== null,
           signal: extra.signal,
           client() {
             if (!credential) throw missingCredential();
-            return (client ??= callerClient(credential, baseUrl, catalog, opts.fetch));
+            return callerClient();
           },
         };
         const started = performance.now();

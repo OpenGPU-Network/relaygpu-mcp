@@ -13,13 +13,17 @@ export interface Credential {
 
 export interface ToolContext {
   transport: TransportKind;
-  /** The shared keyless client: catalog reads (`models`, `pricing`), task and run polls. Never carries a credential. */
+  /** The shared keyless client: task and run polls, workflow listing. Never carries a credential. */
   catalog: Relay;
+  /**
+   * The client every catalog lookup (`models`, `pricing`, `estimateCost`) reads through: the caller's own client when
+   * the connection carries a credential (the answer is the account's view, granted models included), else `catalog`.
+   */
+  reader: Relay;
   /** True when the connection carries a credential (`client()` will not throw). */
   hasCredential: boolean;
   /**
-   * The caller's client for billed and account calls. Its `models`/`pricing` are the shared catalog's (one model
-   * cache per base URL, never per key). Throws `MissingCredentialsError` when the connection carries no credential.
+   * The caller's client for billed and account calls (and the catalog reader, with its own cache). Throws `MissingCredentialsError` when the connection carries no credential.
    */
   client(): Relay;
   /** Aborted when the MCP request is cancelled. */
